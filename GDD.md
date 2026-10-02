@@ -107,15 +107,17 @@ recoil_wing/
 
 ## 7. Roadmap & Milestone Checklist
 
-- [ ] **Milestone 1: Fondasi & Gerakan Karakter**
-  - [ ] Setup game window, 60 FPS clock, loop bersih.
-  - [ ] Karakter burung/drone dengan gravitasi dan animasi tilt/idle.
-  - [ ] Pembatas layar atas dan bawah (*floor & ceiling clamp*).
-- [ ] **Milestone 2: Mekanik Recoil & Sistem Tembak**
-  - [ ] Mekanik tembak ke bawah dengan tombol Spasi / Klik Mouse.
-  - [ ] Gaya dorong impuls (*velocity impulse*) pada pemain.
-  - [ ] Entity proyektil (peluru) yang bergerak ke bawah.
-  - [ ] Sistem batasan tembakan (cooldown / ammo cadangan).
+- [x] **Milestone 1: Fondasi & Gerakan Karakter**
+  - [x] Setup game window, 60 FPS clock, loop bersih.
+  - [x] Karakter burung/drone dengan gravitasi dan animasi tilt/idle.
+  - [x] Pembatas layar atas dan bawah (*floor & ceiling clamp*).
+- [x] **Milestone 2: Mekanik Recoil & Sistem Tembak**
+  - [x] Mekanik tembak ke bawah dengan tombol Spasi / Klik Mouse.
+  - [x] Gaya dorong impuls (*velocity impulse*) pada pemain.
+  - [x] Entity proyektil (peluru) yang bergerak ke bawah dengan trail neon.
+  - [x] Sistem batasan amunisi & indikator recharge pips di HUD.
+  - [x] Visual muzzle flash & kickback animation pada moncong senjata.
+
 - [ ] **Milestone 3: Rintangan Interaktif & Destructible Blocks**
   - [ ] Generator pipa bergulir dari kanan ke kiri.
   - [ ] Variasi rintangan: Pipa padat dan balok yang bisa ditembak hancur.

@@ -13,11 +13,15 @@ from src.config import (
     PLAYER_HEIGHT,
     PLAYER_START_X,
     PLAYER_START_Y,
+    MAX_AMMO,
+    AMMO_RELOAD_FRAMES,
     COLOR_PLAYER,
     COLOR_PLAYER_EYE,
     COLOR_PLAYER_BEAK,
     COLOR_GUN,
+    COLOR_MUZZLE_FLASH,
 )
+from src.entities.bullet import Bullet
 
 
 class Player:
@@ -33,6 +37,12 @@ class Player:
         self.target_rotation = 0.0
         self.is_alive = True
 
+        # Ammo and weapon state
+        self.max_ammo = MAX_AMMO
+        self.ammo = MAX_AMMO
+        self.ammo_reload_timer = 0
+        self.muzzle_flash_timer = 0
+
         # Visual kickback offset when firing
         self.kickback_y = 0.0
 
@@ -46,23 +56,50 @@ class Player:
             self.height,
         )
 
-    def recoil_jump(self, force=RECOIL_FORCE):
-        """Applies an upward impulse via downward recoil."""
-        if not self.is_alive:
-            return
-        
-        # Upward impulse (negative Y in screen space)
-        self.vy = -force
+    def shoot(self):
+        """
+        Shoots a projectile downward, generating an upward recoil impulse.
+        Returns the spawned Bullet instance if shot was successful, or None.
+        """
+        if not self.is_alive or self.ammo <= 0:
+            return None
+
+        # Deduct ammo
+        self.ammo -= 1
+
+        # Apply recoil force
+        self.vy = -RECOIL_FORCE
         if self.vy < MAX_CLIMB_SPEED:
             self.vy = MAX_CLIMB_SPEED
-            
-        self.kickback_y = -3.0  # Visual bump upward
+
+        # Visual feedback: kickback and muzzle flash
+        self.kickback_y = -4.0
+        self.muzzle_flash_timer = 4
+
+        # Spawn bullet from the gun nozzle position (bottom-center of bird)
+        bullet_spawn_x = self.x - 2
+        bullet_spawn_y = self.y + self.height // 2 + 6
+        return Bullet(bullet_spawn_x, bullet_spawn_y)
+
 
     def update(self, dt=1.0):
-        """Update physics, position, and rotation tilt."""
+        """Update physics, position, ammo reload, and rotation tilt."""
         # Decay visual kickback
         if self.kickback_y < 0:
-            self.kickback_y = min(0.0, self.kickback_y + 0.5)
+            self.kickback_y = min(0.0, self.kickback_y + 0.6)
+
+        # Decay muzzle flash
+        if self.muzzle_flash_timer > 0:
+            self.muzzle_flash_timer -= 1
+
+        # Ammo regeneration over time
+        if self.ammo < self.max_ammo:
+            self.ammo_reload_timer += 1
+            if self.ammo_reload_timer >= AMMO_RELOAD_FRAMES:
+                self.ammo += 1
+                self.ammo_reload_timer = 0
+        else:
+            self.ammo_reload_timer = 0
 
         # Apply gravity
         self.vy += GRAVITY * dt
@@ -85,7 +122,7 @@ class Player:
     def draw(self, surface):
         """Draw a stylized, sharp cyber-bird with downward heavy cannon nozzle."""
         # Create a surface for rotation
-        diag = int(math.hypot(self.width + 12, self.height + 12)) + 10
+        diag = int(math.hypot(self.width + 16, self.height + 24)) + 14
         char_surf = pygame.Surface((diag, diag), pygame.SRCALPHA)
         center = (diag // 2, diag // 2)
 
@@ -98,6 +135,19 @@ class Player:
         pygame.draw.rect(char_surf, COLOR_GUN, gun_rect, border_radius=3)
         # Gun barrel tip
         pygame.draw.rect(char_surf, (30, 41, 59), (gun_rect.left, gun_rect.bottom - 4, gun_rect.width, 4))
+
+        # Muzzle Flash (burst diamond at barrel exit)
+        if self.muzzle_flash_timer > 0:
+            flash_tip = (gun_rect.centerx, gun_rect.bottom + 8)
+            flash_points = [
+                (gun_rect.centerx, gun_rect.bottom),
+                (gun_rect.centerx + 6, gun_rect.bottom + 4),
+                flash_tip,
+                (gun_rect.centerx - 6, gun_rect.bottom + 4),
+            ]
+            pygame.draw.polygon(char_surf, COLOR_MUZZLE_FLASH, flash_points)
+            # Center bright white core
+            pygame.draw.circle(char_surf, (255, 255, 255), (gun_rect.centerx, gun_rect.bottom + 3), 2)
 
         # 2. Main Body (Teal / Cyan aerodynamic capsule)
         body_rect = pygame.Rect(0, 0, self.width, self.height)
@@ -142,3 +192,7 @@ class Player:
         self.target_rotation = 0.0
         self.is_alive = True
         self.kickback_y = 0.0
+        self.ammo = self.max_ammo
+        self.ammo_reload_timer = 0
+        self.muzzle_flash_timer = 0
+
