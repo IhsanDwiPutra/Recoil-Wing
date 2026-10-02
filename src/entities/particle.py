@@ -198,3 +198,18 @@ def create_spark_burst(x, y, count=7, color=(250, 204, 21)):
         life = random.randint(8, 16)
         particles.append(Particle(x, y, vx, vy, color, size, life, gravity=0.15))
     return particles
+
+
+def create_drone_debris(x, y, count=16):
+    """Spawns cybernetic shrapnel and electrical sparks when a drone is destroyed."""
+    particles = []
+    colors = [(51, 65, 85), (30, 41, 59), (239, 68, 68), (250, 204, 21), (254, 202, 202)]
+    for _ in range(count):
+        vx = random.uniform(-5.0, 5.0)
+        vy = random.uniform(-6.0, 2.0)
+        color = random.choice(colors)
+        size = random.uniform(2.0, 5.0)
+        life = random.randint(18, 30)
+        particles.append(Particle(x, y, vx, vy, color, size, life, gravity=0.25))
+    return particles
+

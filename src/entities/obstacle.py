@@ -13,6 +13,7 @@ from src.config import (
     COLOR_PIPE_OUTLINE,
     COLOR_CRATE,
 )
+from src.entities.enemy import Drone
 
 
 class Crate:
@@ -82,13 +83,23 @@ class PipePair:
         self.gap_top = self.gap_y - self.gap_height // 2
         self.gap_bottom = self.gap_y + self.gap_height // 2
 
-        # 55% chance to spawn a destructible crate in the gap
+        # Spawn hazards inside the gap:
+        # 36% chance for a destructible crate on the lower edge
+        # 34% chance for an airborne patrol drone bobbing in the middle
+        # 30% chance for a clean unobstructed gap
         self.crate = None
-        if random.random() < 0.55:
-            # Situate crate on the lower threshold of the gap
+        self.drone = None
+        roll = random.random()
+        if roll < 0.36:
             crate_x = self.x + (self.width - CRATE_SIZE) // 2
             crate_y = self.gap_bottom - CRATE_SIZE
             self.crate = Crate(crate_x, crate_y)
+        elif roll < 0.70:
+            drone_x = self.x + self.width // 2
+            drone_y = self.gap_y
+            min_drone_y = self.gap_top + 22
+            max_drone_y = self.gap_bottom - 22
+            self.drone = Drone(drone_x, drone_y, min_drone_y, max_drone_y)
 
     @property
     def top_rect(self):
@@ -108,31 +119,42 @@ class PipePair:
         self.x -= speed
         if self.crate:
             self.crate.x -= speed
+        if self.drone:
+            self.drone.update(speed)
 
     def collides_with_player(self, player_rect):
-        """Check collision against solid pipes or active crate."""
+        """Check collision against solid pipes, active crate, or active drone."""
         if self.top_rect.colliderect(player_rect):
             return True
         if self.bottom_rect.colliderect(player_rect):
             return True
         if self.crate and self.crate.alive and self.crate.rect.colliderect(player_rect):
             return True
+        if self.drone and self.drone.alive and self.drone.rect.colliderect(player_rect):
+            return True
         return False
 
     def check_bullet_hit(self, bullet):
         """
-        Check if a bullet hits the crate or pipes.
+        Check if a bullet hits the drone, crate, or pipes.
         Supports piercing laser beams and ricochet bounces.
         Returns a tuple: (hit_type, hit_x, hit_y, destroyed) or None.
         """
-        # 1. Crate collision
+        # 1. Drone collision (check first since it bobs centrally in the flight corridor)
+        if self.drone and self.drone.alive and self.drone.rect.colliderect(bullet.rect):
+            destroyed = self.drone.take_damage()
+            if not bullet.piercing:
+                bullet.alive = False
+            return ("drone", self.drone.rect.centerx, self.drone.rect.centery, destroyed)
+
+        # 2. Crate collision
         if self.crate and self.crate.alive and self.crate.rect.colliderect(bullet.rect):
             destroyed = self.crate.take_damage()
             if not bullet.piercing:
                 bullet.alive = False
             return ("crate", self.crate.rect.centerx, self.crate.rect.centery, destroyed)
 
-        # 2. Bottom Pipe collision
+        # 3. Bottom Pipe collision
         if self.bottom_rect.colliderect(bullet.rect):
             if bullet.bounces > 0:
                 bullet.bounce_vertical()
@@ -141,7 +163,7 @@ class PipePair:
                 bullet.alive = False
                 return ("pipe", bullet.x, self.bottom_rect.top, False)
 
-        # 3. Top Pipe collision
+        # 4. Top Pipe collision
         if self.top_rect.colliderect(bullet.rect):
             if bullet.bounces > 0:
                 bullet.bounce_vertical()
@@ -207,6 +229,11 @@ class PipePair:
         # 3. Draw Crate if present
         if self.crate and self.crate.alive:
             self.crate.draw(surface)
+
+        # 4. Draw Drone if present
+        if self.drone and self.drone.alive:
+            self.drone.draw(surface)
+
 
 
 class PerkGate:

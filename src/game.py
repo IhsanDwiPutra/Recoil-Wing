@@ -33,6 +33,7 @@ from src.entities.player import Player
 from src.entities.obstacle import PipePair, PerkGatePair
 from src.entities.particle import (
     create_crate_debris,
+    create_drone_debris,
     create_spark_burst,
     ShellCasing,
     SmokePuff,
@@ -343,7 +344,7 @@ class Game:
                         FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
                     )
 
-                # Player collision with solid pipe or intact crate
+                # Player collision with solid pipe or intact crate/drone
                 if o.collides_with_player(self.player.rect):
                     # Check Energy Shield deflection
                     if self.player.shield_charges > 0:
@@ -359,6 +360,9 @@ class Game:
                         o.passed = True
                         if o.crate and o.crate.alive:
                             o.crate.alive = False
+                        if o.drone and o.drone.alive:
+                            o.drone.alive = False
+                            self.particles.extend(create_drone_debris(o.drone.x, o.drone.y, count=14))
                     else:
                         self.player.is_alive = False
                         self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=14))
@@ -376,7 +380,29 @@ class Game:
                     hit = o.check_bullet_hit(b)
                     if hit:
                         hit_type, hx, hy, destroyed = hit
-                        if hit_type == "crate":
+                        if hit_type == "drone":
+                            if destroyed:
+                                self.particles.extend(create_drone_debris(hx, hy, count=16))
+                                self.score += 2  # Tactical drone takedown reward!
+                                self.camera.add_trauma(0.38)
+                                self.sound_mgr.play("explosion", 0.95)
+
+                                # Downwell-style aerial combo reward: instant +1 ammo refund!
+                                if self.player.ammo < self.player.max_ammo:
+                                    self.player.ammo += 1
+                                    popup_text = "+2 DRONE! (+1 AMMO)"
+                                    text_color = (45, 212, 191)  # Teal
+                                else:
+                                    popup_text = "+2 DRONE!"
+                                    text_color = (244, 63, 94)   # Rose red
+
+                                self.floating_texts.append(
+                                    FloatingText(popup_text, hx, hy - 16, text_color, self.font_body)
+                                )
+                            else:
+                                self.particles.extend(create_spark_burst(hx, hy, count=6, color=(239, 68, 68)))
+                                self.camera.add_trauma(0.15)
+                        elif hit_type == "crate":
                             if destroyed:
                                 self.particles.extend(create_crate_debris(hx, hy, count=16))
                                 self.score += 2  # Tactical demolition reward!
@@ -393,7 +419,6 @@ class Game:
                             self.sound_mgr.play("shoot", 0.35)
                         else:
                             self.particles.extend(create_spark_burst(hx, hy, count=6))
-
 
                         if not b.piercing:
                             break

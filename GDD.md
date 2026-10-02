@@ -158,5 +158,13 @@ recoil_wing/
   - [x] SoundManager modular (`src/utils/sound_manager.py`) dengan multi-channel audio dan safe fallback.
   - [x] Fitur mute cepat via tombol keyboard `M` (mute SFX & BGM sekaligus).
 
+- [x] **Phase 3 - Milestone 7: Airborne Security Drones (Dynamic Obstacle & Aerial Combo)**
+  - [x] Entitas musuh Drone (`src/entities/enemy.py`) dengan animasi jet thruster ganda, chassis heksagonal gelap, antena sinyal, dan mata sensor merah dengan radar scan pulse meluas.
+  - [x] Pola patroli vertikal sinusoidal dinamis di koridor celah pipa (`PipePair`) dengan variasi probabilitas kemunculan (Peti, Drone, atau Celah Terbuka).
+  - [x] Mekanik Aerial Combo ala Downwell: Menembak jatuh Drone menghadiahkan **+2 Skor** dan **Instant +1 Ammo Refund** untuk melanjutkan kombo terbang tanpa mendarat!
+  - [x] Sistem debris sibernetik (`create_drone_debris`) dengan serpihan logam gelap, percikan api merah dan percikan listrik neon.
+  - [x] Interaksi Energy Shield: Shield kinetik dapat menghancurkan drone seketika saat bertabrakan tanpa mematikan player.
+
+
 
 
