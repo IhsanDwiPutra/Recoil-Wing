@@ -1,7 +1,7 @@
 """
 Game controller and main loop for Recoil Wing.
 Handles state management, camera screen shake, parallax backgrounds,
-persistent high scores, and roguelite perk evolution.
+persistent high scores, and real-time in-flight Perk Gates (no pauses!).
 """
 import os
 import sys
@@ -30,7 +30,7 @@ from src.config import (
     PIPE_SPAWN_FRAMES,
 )
 from src.entities.player import Player
-from src.entities.obstacle import PipePair
+from src.entities.obstacle import PipePair, PerkGatePair
 from src.entities.particle import (
     create_crate_debris,
     create_spark_burst,
@@ -49,12 +49,11 @@ from src.utils.camera import Camera
 class GameState:
     READY = "ready"
     PLAYING = "playing"
-    UPGRADE_SELECTION = "upgrade_selection"
     GAME_OVER = "game_over"
 
 
 HIGH_SCORE_FILE = os.path.join(os.path.dirname(__file__), "..", "highscore.dat")
-UPGRADE_THRESHOLDS = [5, 12, 20, 32]
+UPGRADE_THRESHOLDS = [5, 12, 20, 32, 45]
 
 
 class Game:
@@ -76,8 +75,7 @@ class Game:
         self.font_title = pygame.font.SysFont("Trebuchet MS", 38, bold=True)
         self.font_body = pygame.font.SysFont("Trebuchet MS", 18, bold=True)
         self.font_small = pygame.font.SysFont("Trebuchet MS", 13)
-        self.font_badge = pygame.font.SysFont("Trebuchet MS", 14, bold=True)
-        self.font_card_desc = pygame.font.SysFont("Trebuchet MS", 12)
+        self.font_badge = pygame.font.SysFont("Trebuchet MS", 13, bold=True)
 
         # Ground setting
         self.ground_height = 80
@@ -99,6 +97,7 @@ class Game:
         self.player = Player()
         self.bullets = []
         self.obstacles = []
+        self.gates = []
         self.particles = []
         self.floating_texts = []
         self.pipe_spawn_timer = 0
@@ -109,8 +108,6 @@ class Game:
         # Perks & Upgrades
         self.active_perks = []
         self.claimed_milestones = set()
-        self.current_perk_choices = []
-        self.card_rects = []
 
     def _generate_skyline(self):
         """Generates initial silhouette skyline buildings for parallax."""
@@ -163,38 +160,20 @@ class Game:
 
     def handle_input(self):
         """Process input events."""
-        mouse_pos = pygame.mouse.get_pos()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                if self.state == GameState.UPGRADE_SELECTION:
-                    if event.key == pygame.K_1 and len(self.current_perk_choices) >= 1:
-                        self.select_perk(0)
-                    elif event.key == pygame.K_2 and len(self.current_perk_choices) >= 2:
-                        self.select_perk(1)
-                    elif event.key == pygame.K_3 and len(self.current_perk_choices) >= 3:
-                        self.select_perk(2)
-
-                else:
-                    if event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
-                        self.on_jump_action()
-                    elif event.key == pygame.K_r:
-                        self.reset_game()
+                if event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
+                    self.on_jump_action()
+                elif event.key == pygame.K_r:
+                    self.reset_game()
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left Click
-                    if self.state == GameState.UPGRADE_SELECTION:
-                        # Check which card was clicked
-                        for idx, rect in enumerate(self.card_rects):
-                            if rect.collidepoint(mouse_pos):
-                                self.select_perk(idx)
-                                break
-                    else:
-                        self.on_jump_action()
+                    self.on_jump_action()
 
     def on_jump_action(self):
         """Handle jump/recoil action across different states."""
@@ -211,29 +190,15 @@ class Game:
         new_bullets = self.player.shoot()
         if new_bullets:
             self.bullets.extend(new_bullets)
-            # Eject brass casing
             self.particles.append(ShellCasing(self.player.x - 6, self.player.y + 4))
-            # Spawn soft muzzle smoke
             self.particles.append(SmokePuff(self.player.x - 2, self.player.y + self.player.height // 2 + 6))
-            # Screen shake recoil kick
             self.camera.add_trauma(0.18)
 
-    def trigger_upgrade_phase(self):
-        """Transitions into Upgrade Pick screen."""
-        self.state = GameState.UPGRADE_SELECTION
-        self.current_perk_choices = get_random_perk_choices(self.active_perks, count=3)
-        self.player.vy = 0.0  # Zero out velocity during selection
-
-    def select_perk(self, index):
-        """Applies chosen perk and resumes gameplay smoothly."""
-        if index >= len(self.current_perk_choices):
-            return
-
-        choice = self.current_perk_choices[index]
+    def apply_perk(self, choice):
+        """Applies chosen perk to player stats."""
         pid = choice["id"]
         self.active_perks.append(pid)
 
-        # Apply perk effect
         if pid == PerkID.SHOTGUN:
             self.player.weapon_type = "SHOTGUN"
         elif pid == PerkID.PIERCER:
@@ -247,21 +212,12 @@ class Game:
             self.player.ammo = 6
             self.player.reload_frames = int(AMMO_RELOAD_FRAMES * 0.65)
 
-        # Visual feedback
-        self.floating_texts.append(
-            FloatingText(f"+ {choice['name']}!", SCREEN_WIDTH // 2, 280, choice["color"], self.font_body)
-        )
-        self.camera.add_trauma(0.35)
-
-        # Smooth return to gameplay with a gentle hover
-        self.player.vy = -3.5
-        self.state = GameState.PLAYING
-
     def reset_game(self):
         """Reset game to initial ready state."""
         self.player.reset()
         self.bullets.clear()
         self.obstacles.clear()
+        self.gates.clear()
         self.particles.clear()
         self.floating_texts.clear()
         self.active_perks.clear()
@@ -276,7 +232,7 @@ class Game:
         """Transitions into Game Over and checks high score record."""
         if self.state != GameState.GAME_OVER:
             self.state = GameState.GAME_OVER
-            self.camera.add_trauma(0.70)  # Crunch crash shake
+            self.camera.add_trauma(0.70)
             if self.score > self.high_score:
                 self.high_score = self.score
                 self.is_new_best = True
@@ -286,10 +242,6 @@ class Game:
         """Update game logic."""
         # Camera trauma decay
         self.camera.update()
-
-        # When in upgrade selection, background stays static
-        if self.state == GameState.UPGRADE_SELECTION:
-            return
 
         # Parallax Skyline scrolling
         skyline_speed = PIPE_SPEED * 0.35 if self.state == GameState.PLAYING else 0.4
@@ -309,24 +261,53 @@ class Game:
         elif self.state == GameState.PLAYING:
             self.player.update()
 
-            # Check Milestone Upgrade Trigger
+            # 1. Milestone Check: Spawn In-Flight Choice Gate Pair
             for threshold in UPGRADE_THRESHOLDS:
                 if self.score >= threshold and threshold not in self.claimed_milestones:
                     self.claimed_milestones.add(threshold)
-                    self.trigger_upgrade_phase()
-                    return
+                    choices = get_random_perk_choices(self.active_perks, count=2)
+                    if len(choices) >= 2:
+                        self.gates.append(PerkGatePair(SCREEN_WIDTH + 30, choices[0], choices[1], self.ground_y))
+                        # Give breathing room: delay regular pipe spawn
+                        self.pipe_spawn_timer = -75
+                        break
 
-            # 1. Spawn Obstacles
+            # 2. Spawn Regular Obstacles
             self.pipe_spawn_timer += 1
             if self.pipe_spawn_timer >= PIPE_SPAWN_FRAMES:
                 self.obstacles.append(PipePair(SCREEN_WIDTH + 10, self.ground_y))
                 self.pipe_spawn_timer = 0
 
-            # 2. Update Obstacles & Check Player Collision / Scoring
+            # 3. Update Choice Gates (Real-Time Fly-Through)
+            for g in self.gates:
+                g.update(PIPE_SPEED)
+
+                # Check if player collected one of the gates
+                chosen_perk = g.check_player_interaction(self.player.rect)
+                if chosen_perk:
+                    self.apply_perk(chosen_perk)
+                    self.camera.add_trauma(0.35)
+                    self.particles.extend(
+                        create_spark_burst(self.player.x, self.player.y, count=22, color=chosen_perk["color"])
+                    )
+                    self.floating_texts.append(
+                        FloatingText(f"+ {chosen_perk['name']}!", self.player.x, self.player.y - 25, chosen_perk["color"], self.font_body)
+                    )
+
+                # Pass Gate Score
+                if not g.passed and self.player.x > g.x + g.width:
+                    g.passed = True
+                    self.score += 1
+                    self.floating_texts.append(
+                        FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
+                    )
+
+            self.gates = [g for g in self.gates if g.x + g.width > -40]
+
+            # 4. Update Obstacles & Check Player Collision / Scoring
             for o in self.obstacles:
                 o.update(PIPE_SPEED)
 
-                # Point scored when clearing obstacle
                 if not o.passed and self.player.x > o.x + o.width:
                     o.passed = True
                     self.score += 1
@@ -346,7 +327,6 @@ class Game:
                         self.floating_texts.append(
                             FloatingText("SHIELD DEFLECT!", self.player.x, self.player.y - 22, (56, 189, 248), self.font_body)
                         )
-                        # Push obstacle passed so player doesn't get stuck hitting it again
                         o.passed = True
                         if o.crate and o.crate.alive:
                             o.crate.alive = False
@@ -355,10 +335,9 @@ class Game:
                         self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=14))
                         self.trigger_game_over()
 
-            # Remove off-screen obstacles
             self.obstacles = [o for o in self.obstacles if o.x + o.width > -40]
 
-            # 3. Update Bullets & Check Collisions with Obstacles
+            # 5. Update Bullets & Check Collisions with Obstacles
             for b in self.bullets:
                 b.update(self.ground_y)
                 if not b.alive:
@@ -389,7 +368,7 @@ class Game:
 
             self.bullets = [b for b in self.bullets if b.alive]
 
-            # 4. Update Particles (including shell casings)
+            # 6. Update Particles (including shell casings)
             for p in self.particles:
                 if isinstance(p, ShellCasing):
                     p.update(self.ground_y)
@@ -397,17 +376,17 @@ class Game:
                     p.update()
             self.particles = [p for p in self.particles if p.alive]
 
-            # 5. Update Floating Texts
+            # 7. Update Floating Texts
             for ft in self.floating_texts:
                 ft.update()
             self.floating_texts = [ft for ft in self.floating_texts if ft.alive]
 
-            # 6. Ceiling clamp
+            # 8. Ceiling clamp
             if self.player.y - self.player.height // 2 < 0:
                 self.player.y = self.player.height // 2
                 self.player.vy = max(0.0, self.player.vy)
 
-            # 7. Ground collision
+            # 9. Ground collision
             if self.player.y + self.player.height // 2 >= self.ground_y:
                 self.player.y = self.ground_y - self.player.height // 2
                 if self.player.is_alive:
@@ -451,22 +430,26 @@ class Game:
                 win_rect = pygame.Rect(int(b['x']) + wx, by + wy, 3, 4)
                 pygame.draw.rect(self.canvas, (56, 189, 248), win_rect)
 
-        # 3. Obstacles
+        # 3. Choice Gates (In-Flight Portals)
+        for g in self.gates:
+            g.draw(self.canvas, self.font_badge)
+
+        # 4. Obstacles
         for o in self.obstacles:
             o.draw(self.canvas)
 
-        # 4. Bullets
+        # 5. Bullets
         for b in self.bullets:
             b.draw(self.canvas)
 
-        # 5. Particles & Casings
+        # 6. Particles & Casings
         for p in self.particles:
             p.draw(self.canvas)
 
-        # 6. Player
+        # 7. Player
         self.player.draw(self.canvas)
 
-        # 7. Ground
+        # 8. Ground
         ground_rect = pygame.Rect(0, self.ground_y, SCREEN_WIDTH, self.ground_height)
         pygame.draw.rect(self.canvas, COLOR_GROUND, ground_rect)
         pygame.draw.line(
@@ -486,16 +469,12 @@ class Game:
                 width=2,
             )
 
-        # 8. Floating Score Popups
+        # 9. Floating Score Popups
         for ft in self.floating_texts:
             ft.draw(self.canvas)
 
-        # 9. HUD & Menus
+        # 10. HUD & Menus
         self._draw_hud(self.canvas)
-
-        # 10. Upgrade Selection Modal (if in selection state)
-        if self.state == GameState.UPGRADE_SELECTION:
-            self._draw_upgrade_modal(self.canvas)
 
         # 11. Blit Canvas with Screen Shake Offset
         dx, dy = self.camera.get_offset()
@@ -523,7 +502,7 @@ class Game:
                 best_rect = best_surf.get_rect(center=(SCREEN_WIDTH // 2, 265))
                 surface.blit(best_surf, best_rect)
 
-            hint_surf = self.font_small.render("[Milestone 5: Roguelite Perks & Modifiers Prototype]", True, COLOR_TEXT_MUTED)
+            hint_surf = self.font_small.render("Fly through neon Perk Gates in mid-flight to upgrade!", True, COLOR_TEXT_MUTED)
             hint_rect = hint_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30))
             surface.blit(hint_surf, hint_rect)
 
@@ -605,68 +584,6 @@ class Game:
             else:
                 pygame.draw.rect(surface, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
                 pygame.draw.rect(surface, (40, 50, 70), pip_rect, width=1, border_radius=3)
-
-    def _draw_upgrade_modal(self, surface):
-        """Draw interactive roguelite perk card selection screen."""
-        # 1. Dark semi-transparent backdrop
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((12, 14, 26, 220))
-        surface.blit(overlay, (0, 0))
-
-        # 2. Header
-        header_surf = self.font_title.render("CHOOSE UPGRADE", True, (250, 204, 21))
-        surface.blit(header_surf, header_surf.get_rect(center=(SCREEN_WIDTH // 2, 120)))
-
-        sub_surf = self.font_small.render("Press [1], [2], [3] or Click to Select", True, COLOR_TEXT_MUTED)
-        surface.blit(sub_surf, sub_surf.get_rect(center=(SCREEN_WIDTH // 2, 155)))
-
-        # 3. Cards
-        card_w = SCREEN_WIDTH - 70
-        card_h = 100
-        start_y = 190
-        spacing = 16
-
-        self.card_rects = []
-        mouse_pos = pygame.mouse.get_pos()
-
-        for idx, perk in enumerate(self.current_perk_choices):
-            cy = start_y + idx * (card_h + spacing)
-            card_rect = pygame.Rect(35, cy, card_w, card_h)
-            self.card_rects.append(card_rect)
-
-            is_hovered = card_rect.collidepoint(mouse_pos)
-
-            # Card background
-            card_bg = (32, 38, 62) if is_hovered else (22, 26, 44)
-            pygame.draw.rect(surface, card_bg, card_rect, border_radius=10)
-
-            # Card border (glows with perk's accent color)
-            border_color = perk["color"] if is_hovered else (55, 65, 95)
-            pygame.draw.rect(surface, border_color, card_rect, width=2 if not is_hovered else 3, border_radius=10)
-
-            # Key Shortcut Badge [1], [2], [3]
-            num_surf = self.font_body.render(f"[{idx + 1}]", True, perk["color"])
-            surface.blit(num_surf, (card_rect.left + 14, card_rect.top + 14))
-
-            # Category pill tag
-            cat_surf = self.font_small.render(perk["category"], True, (203, 213, 225))
-            cat_bg = pygame.Rect(card_rect.right - 85, card_rect.top + 12, 72, 18)
-            pygame.draw.rect(surface, (15, 23, 42), cat_bg, border_radius=4)
-            surface.blit(cat_surf, cat_surf.get_rect(center=cat_bg.center))
-
-            # Perk Title
-            title_surf = self.font_body.render(perk["name"], True, COLOR_TEXT)
-            surface.blit(title_surf, (card_rect.left + 48, card_rect.top + 14))
-
-            # Description (word wrapped or clean 2-line rendering)
-            desc_words = perk["description"].split(" ")
-            line1 = " ".join(desc_words[:6])
-            line2 = " ".join(desc_words[6:])
-            d1_surf = self.font_card_desc.render(line1, True, (203, 213, 225))
-            surface.blit(d1_surf, (card_rect.left + 16, card_rect.top + 48))
-            if line2:
-                d2_surf = self.font_card_desc.render(line2, True, (203, 213, 225))
-                surface.blit(d2_surf, (card_rect.left + 16, card_rect.top + 68))
 
     def run(self):
         """Main game loop."""

@@ -207,3 +207,102 @@ class PipePair:
         # 3. Draw Crate if present
         if self.crate and self.crate.alive:
             self.crate.draw(surface)
+
+
+class PerkGate:
+    """Individual glowing holographic energy portal in a gate pair."""
+    def __init__(self, perk_data, y, height=120):
+        self.perk = perk_data
+        self.y = float(y)
+        self.height = height
+        self.width = 76
+        self.pulse = random.uniform(0, 6.28)
+
+    def draw(self, surface, x, font):
+        color = self.perk["color"]
+        self.pulse += 0.08
+        r = pygame.Rect(int(x), int(self.y - self.height // 2), self.width, self.height)
+
+        # Translucent energy field
+        gate_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+        gate_surf.fill((color[0], color[1], color[2], 40))
+        # Pulsing energy border
+        pygame.draw.rect(gate_surf, color, (0, 0, r.width, r.height), width=3, border_radius=8)
+
+        # Inner holographic lines
+        for line_y in range(12, r.height - 10, 18):
+            pygame.draw.line(gate_surf, (255, 255, 255, 130), (8, line_y), (r.width - 8, line_y), width=1)
+        surface.blit(gate_surf, r.topleft)
+
+        # Top & Bottom metallic emitter nodes
+        pygame.draw.circle(surface, (203, 213, 225), (r.centerx, r.top), 6)
+        pygame.draw.circle(surface, color, (r.centerx, r.top), 3)
+        pygame.draw.circle(surface, (203, 213, 225), (r.centerx, r.bottom), 6)
+        pygame.draw.circle(surface, color, (r.centerx, r.bottom), 3)
+
+        # Center Badge Pill with Perk Name
+        pill_w = 88
+        pill_rect = pygame.Rect(r.centerx - pill_w // 2, r.centery - 13, pill_w, 26)
+        pygame.draw.rect(surface, (15, 23, 42), pill_rect, border_radius=6)
+        pygame.draw.rect(surface, color, pill_rect, width=2, border_radius=6)
+
+        text_surf = font.render(self.perk["badge"], True, color)
+        surface.blit(text_surf, text_surf.get_rect(center=pill_rect.center))
+
+
+class PerkGatePair:
+    """
+    In-flight choice gate pair.
+    Offers two perks (Upper Gate vs Lower Gate) in real-time.
+    Safe to fly through, no pauses, and no crash if missed!
+    """
+    def __init__(self, x, perk1, perk2, ground_y):
+        self.x = float(x)
+        self.width = 76
+        self.ground_y = ground_y
+        self.passed = False
+        self.collected = False
+
+        # Two gates placed vertically
+        self.gate_top = PerkGate(perk1, 230)
+        self.gate_bottom = PerkGate(perk2, ground_y - 190)
+
+    def update(self, speed):
+        self.x -= speed
+
+    def check_player_interaction(self, player_rect):
+        """
+        Checks if player flew through either gate.
+        Returns the chosen perk dict if collected, or None.
+        """
+        if self.collected:
+            return None
+
+        top_rect = pygame.Rect(
+            int(self.x),
+            int(self.gate_top.y - self.gate_top.height // 2),
+            self.width,
+            self.gate_top.height,
+        )
+        if top_rect.colliderect(player_rect):
+            self.collected = True
+            return self.gate_top.perk
+
+        bottom_rect = pygame.Rect(
+            int(self.x),
+            int(self.gate_bottom.y - self.gate_bottom.height // 2),
+            self.width,
+            self.gate_bottom.height,
+        )
+        if bottom_rect.colliderect(player_rect):
+            self.collected = True
+            return self.gate_bottom.perk
+
+        return None
+
+    def draw(self, surface, font):
+        """Draw top and bottom choice portals with glowing label."""
+        if not self.collected:
+            self.gate_top.draw(surface, self.x, font)
+            self.gate_bottom.draw(surface, self.x, font)
+

@@ -46,10 +46,14 @@ Pemain tidak hanya dituntut untuk menghindari rintangan pipa, tetapi juga dapat 
   - Karakter memiliki slot peluru (contoh: 3-4 peluru cepat).
   - Menginjak tanah atau cooldown singkat otomatis mengisi ulang peluru, sehingga pemain tidak bisa sekadar *mash button* tanpa perhitungan ritme.
 
-### 3.3. Obstacles & Environment
-1. **Solid Pipes (Unbreakable):** Dinding pipa logam padat yang wajib dihindari.
-2. **Destructible Crates / Blocks:** Balok rapuh di antara celah pipa yang bisa dihancurkan dengan 1-2 tembakan untuk membuka jalan pintas.
-3. **Hazard Spikes / Lasers:** Area bahaya tambahan di level lebih lanjut.
+### 3.3. Obstacles, Hazards & In-Flight Gates
+1. **Solid Pipes (Unbreakable):** Dinding pipa logam padat berarsitektur industrial yang wajib dihindari.
+2. **Destructible Crates / Blocks:** Peti bahaya rapuh di antara celah pipa yang bisa dihancurkan dengan tembakan ke bawah untuk membuka jalur bebas.
+3. **In-Flight Choice Gates (Real-Time Evolution):**
+   - Di titik skor milestone (5, 12, 20, 32), muncul sepasang gerbang portal energi holografik atas & bawah.
+   - **Tanpa Pause!** Pemain bebas mengarahkan recoil untuk terbang menembus salah satu gerbang yang diinginkan secara *seamless* tanpa memutus momentum terbang.
+   - Gerbang tidak mematikan; pemain yang melewatkan gerbang tetap aman melanjutkan permainan.
+
 
 ---
 
