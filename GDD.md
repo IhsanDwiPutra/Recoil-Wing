@@ -125,10 +125,14 @@ recoil_wing/
   - [x] Sistem partikel puing ledakan (*crate debris burst*) dan percikan api logam (*sparks*).
   - [x] Sistem skor rintangan (+1) dan bonus skor penghancuran peti (+2).
 
-- [ ] **Milestone 4: Game Loop, Scoring, & Polish (Juicing)**
-  - [ ] Layar Title / Ready, In-Game, dan Game Over screen.
-  - [ ] Sistem penghitungan skor & High Score.
-  - [ ] Screen shake pada kamera saat menembak dan balok meledak.
-  - [ ] Efek partikel (asap tembakan, selongsong peluru, serpihan hancur).
+- [x] **Milestone 4: Game Loop, Scoring, & Polish (Juicing)**
+  - [x] Layar Title / Ready dengan rekor terbaik, In-Game HUD, dan Game Over modal.
+  - [x] Sistem penyimpanan High Score persisten lokal (`highscore.dat`) & pita "NEW BEST RECORD".
+  - [x] Kamera Screen Shake berbasis trauma quadratic (recoil kick, crate blast, crash).
+  - [x] Selongsong peluru kuningan (*brass shell casings*) yang terlempar & memantul di tanah.
+  - [x] Partikel kepulan asap laras senjata (*muzzle smoke puffs*).
+  - [x] Efek popup teks skor melayang (`+1`, `+2 CRATE!`).
+  - [x] Parallax background silhouette skyline kota cyberpunk yang bergulir halus.
+
 - [ ] **Milestone 5: Ekstensi Fitur (Perks & Modifiers)**
   - [ ] Eksperimen power-up / upgrade berkala (Shotgun recoil, bouncing bullet, dll.).

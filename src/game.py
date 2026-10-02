@@ -1,8 +1,11 @@
 """
 Game controller and main loop for Recoil Wing.
+Handles state management, camera screen shake, parallax backgrounds, and persistent high scores.
 """
+import os
 import sys
 import math
+import random
 import pygame
 
 from src.config import (
@@ -27,13 +30,23 @@ from src.config import (
 )
 from src.entities.player import Player
 from src.entities.obstacle import PipePair
-from src.entities.particle import create_crate_debris, create_spark_burst
+from src.entities.particle import (
+    create_crate_debris,
+    create_spark_burst,
+    ShellCasing,
+    SmokePuff,
+    FloatingText,
+)
+from src.utils.camera import Camera
 
 
 class GameState:
     READY = "ready"
     PLAYING = "playing"
     GAME_OVER = "game_over"
+
+
+HIGH_SCORE_FILE = os.path.join(os.path.dirname(__file__), "..", "highscore.dat")
 
 
 class Game:
@@ -45,33 +58,64 @@ class Game:
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
 
+        # Canvas surface for screen shake blitting
+        self.canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.camera = Camera()
+
         # Fonts
-        self.font_score = pygame.font.SysFont("Trebuchet MS", 48, bold=True)
-        self.font_score_label = pygame.font.SysFont("Trebuchet MS", 14, bold=True)
-        self.font_title = pygame.font.SysFont("Trebuchet MS", 36, bold=True)
+        self.font_score = pygame.font.SysFont("Trebuchet MS", 52, bold=True)
+        self.font_score_label = pygame.font.SysFont("Trebuchet MS", 16, bold=True)
+        self.font_title = pygame.font.SysFont("Trebuchet MS", 38, bold=True)
         self.font_body = pygame.font.SysFont("Trebuchet MS", 18, bold=True)
         self.font_small = pygame.font.SysFont("Trebuchet MS", 13)
-
+        self.font_badge = pygame.font.SysFont("Trebuchet MS", 14, bold=True)
 
         # Ground setting
         self.ground_height = 80
         self.ground_y = SCREEN_HEIGHT - self.ground_height
 
-        # Pre-render background gradient for high performance
+        # Pre-render background gradient
         self.bg_surface = self._create_gradient_surface(
             SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BG_TOP, COLOR_BG_BOTTOM
         )
+
+        # Parallax City Skyline
+        self.buildings = self._generate_skyline()
+
+        # High score persistence
+        self.high_score = self.load_high_score()
+        self.is_new_best = False
 
         # Entities & States
         self.player = Player()
         self.bullets = []
         self.obstacles = []
         self.particles = []
+        self.floating_texts = []
         self.pipe_spawn_timer = 0
         self.state = GameState.READY
         self.score = 0
-        self.high_score = 0
         self.ready_timer = 0.0
+
+    def _generate_skyline(self):
+        """Generates initial silhouette skyline buildings for parallax."""
+        buildings = []
+        cur_x = 0
+        while cur_x < SCREEN_WIDTH + 140:
+            w = random.randint(38, 70)
+            h = random.randint(110, 240)
+            windows = [
+                (random.randint(4, w - 8), random.randint(12, h - 20))
+                for _ in range(random.randint(3, 6))
+            ]
+            buildings.append({
+                'x': float(cur_x),
+                'w': w,
+                'h': h,
+                'windows': windows,
+            })
+            cur_x += w + random.randint(4, 14)
+        return buildings
 
     def _create_gradient_surface(self, width, height, top_color, bottom_color):
         """Pre-renders a smooth 2-color vertical linear gradient surface."""
@@ -83,6 +127,24 @@ class Game:
             b = int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio)
             pygame.draw.line(surf, (r, g, b), (0, y), (width, y))
         return surf
+
+    def load_high_score(self):
+        """Load persistent high score from local file."""
+        try:
+            if os.path.exists(HIGH_SCORE_FILE):
+                with open(HIGH_SCORE_FILE, "r") as f:
+                    return int(f.read().strip())
+        except Exception:
+            pass
+        return 0
+
+    def save_high_score(self, score):
+        """Save persistent high score to local file."""
+        try:
+            with open(HIGH_SCORE_FILE, "w") as f:
+                f.write(str(score))
+        except Exception:
+            pass
 
     def handle_input(self):
         """Process input events."""
@@ -105,15 +167,23 @@ class Game:
         """Handle jump/recoil action across different states."""
         if self.state == GameState.READY:
             self.state = GameState.PLAYING
-            bullet = self.player.shoot()
-            if bullet:
-                self.bullets.append(bullet)
+            self.fire_weapon()
         elif self.state == GameState.PLAYING:
-            bullet = self.player.shoot()
-            if bullet:
-                self.bullets.append(bullet)
+            self.fire_weapon()
         elif self.state == GameState.GAME_OVER:
             self.reset_game()
+
+    def fire_weapon(self):
+        """Fires weapon, spawns bullet, shell casing, muzzle smoke, and screen shake."""
+        bullet = self.player.shoot()
+        if bullet:
+            self.bullets.append(bullet)
+            # Eject brass casing
+            self.particles.append(ShellCasing(self.player.x - 6, self.player.y + 4))
+            # Spawn soft muzzle smoke
+            self.particles.append(SmokePuff(self.player.x - 2, self.player.y + self.player.height // 2 + 6))
+            # Screen shake recoil kick
+            self.camera.add_trauma(0.18)
 
     def reset_game(self):
         """Reset game to initial ready state."""
@@ -121,13 +191,38 @@ class Game:
         self.bullets.clear()
         self.obstacles.clear()
         self.particles.clear()
+        self.floating_texts.clear()
         self.pipe_spawn_timer = 0
         self.state = GameState.READY
         self.score = 0
+        self.is_new_best = False
         self.ready_timer = 0.0
+
+    def trigger_game_over(self):
+        """Transitions into Game Over and checks high score record."""
+        if self.state != GameState.GAME_OVER:
+            self.state = GameState.GAME_OVER
+            self.camera.add_trauma(0.70)  # Crunch crash shake
+            if self.score > self.high_score:
+                self.high_score = self.score
+                self.is_new_best = True
+                self.save_high_score(self.high_score)
 
     def update(self):
         """Update game logic."""
+        # Camera trauma decay
+        self.camera.update()
+
+        # Parallax Skyline scrolling
+        skyline_speed = PIPE_SPEED * 0.35 if self.state == GameState.PLAYING else 0.4
+        for b in self.buildings:
+            b['x'] -= skyline_speed
+        if self.buildings and self.buildings[0]['x'] + self.buildings[0]['w'] < -20:
+            first = self.buildings.pop(0)
+            last_x = max(b['x'] + b['w'] for b in self.buildings)
+            first['x'] = last_x + random.randint(4, 14)
+            self.buildings.append(first)
+
         if self.state == GameState.READY:
             # Idle gentle floating bobbing animation
             self.ready_timer += 0.05
@@ -151,14 +246,15 @@ class Game:
                 if not o.passed and self.player.x > o.x + o.width:
                     o.passed = True
                     self.score += 1
+                    self.floating_texts.append(
+                        FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
+                    )
 
                 # Player collision with solid pipe or intact crate
                 if o.collides_with_player(self.player.rect):
                     self.player.is_alive = False
-                    self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=12))
-                    self.state = GameState.GAME_OVER
-                    if self.score > self.high_score:
-                        self.high_score = self.score
+                    self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=14))
+                    self.trigger_game_over()
 
             # Remove off-screen obstacles
             self.obstacles = [o for o in self.obstacles if o.x + o.width > -40]
@@ -176,45 +272,63 @@ class Game:
                         hit_type, hx, hy, destroyed = hit
                         if hit_type == "crate":
                             if destroyed:
-                                self.particles.extend(create_crate_debris(hx, hy, count=14))
+                                self.particles.extend(create_crate_debris(hx, hy, count=16))
                                 self.score += 2  # Tactical demolition reward!
+                                self.camera.add_trauma(0.40)  # Big explosion shake
+                                self.floating_texts.append(
+                                    FloatingText("+2 CRATE!", hx, hy - 14, (250, 204, 21), self.font_body)
+                                )
                             else:
                                 self.particles.extend(create_spark_burst(hx, hy, count=5))
+                                self.camera.add_trauma(0.15)
                         else:
                             self.particles.extend(create_spark_burst(hx, hy, count=6))
                         break
 
             self.bullets = [b for b in self.bullets if b.alive]
 
-            # 4. Update Particles
+            # 4. Update Particles (including shell casings)
             for p in self.particles:
-                p.update()
+                if isinstance(p, ShellCasing):
+                    p.update(self.ground_y)
+                else:
+                    p.update()
             self.particles = [p for p in self.particles if p.alive]
 
-            # 5. Ceiling clamp
+            # 5. Update Floating Texts
+            for ft in self.floating_texts:
+                ft.update()
+            self.floating_texts = [ft for ft in self.floating_texts if ft.alive]
+
+            # 6. Ceiling clamp
             if self.player.y - self.player.height // 2 < 0:
                 self.player.y = self.player.height // 2
                 self.player.vy = max(0.0, self.player.vy)
 
-            # 6. Ground collision
+            # 7. Ground collision
             if self.player.y + self.player.height // 2 >= self.ground_y:
                 self.player.y = self.ground_y - self.player.height // 2
                 if self.player.is_alive:
                     self.player.is_alive = False
-                    self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=8))
-                    self.state = GameState.GAME_OVER
-                    if self.score > self.high_score:
-                        self.high_score = self.score
+                    self.particles.extend(create_spark_burst(self.player.x, self.player.y, count=10))
+                    self.trigger_game_over()
 
         elif self.state == GameState.GAME_OVER:
-            # Update remaining bullets & particles
+            # Update remaining bullets, particles, and floating texts
             for b in self.bullets:
                 b.update(self.ground_y)
             self.bullets = [b for b in self.bullets if b.alive]
 
             for p in self.particles:
-                p.update()
+                if isinstance(p, ShellCasing):
+                    p.update(self.ground_y)
+                else:
+                    p.update()
             self.particles = [p for p in self.particles if p.alive]
+
+            for ft in self.floating_texts:
+                ft.update()
+            self.floating_texts = [ft for ft in self.floating_texts if ft.alive]
 
             # Allow dead bird to drop to the floor
             if self.player.y + self.player.height // 2 < self.ground_y:
@@ -223,30 +337,41 @@ class Game:
                     self.player.y = self.ground_y - self.player.height // 2
 
     def draw(self):
-        """Render frame."""
-        # 1. Background
-        self.screen.blit(self.bg_surface, (0, 0))
+        """Render frame with camera screen shake."""
+        # 1. Background Gradient
+        self.canvas.blit(self.bg_surface, (0, 0))
 
-        # 2. Obstacles (behind bullets & player)
+        # 2. Parallax Skyline (Distant silhouette)
+        for b in self.buildings:
+            by = self.ground_y - b['h']
+            b_rect = pygame.Rect(int(b['x']), by, b['w'], b['h'])
+            pygame.draw.rect(self.canvas, (24, 27, 46), b_rect)
+            pygame.draw.rect(self.canvas, (33, 38, 64), b_rect, width=1)
+            # Glowing windows
+            for wx, wy in b['windows']:
+                win_rect = pygame.Rect(int(b['x']) + wx, by + wy, 3, 4)
+                pygame.draw.rect(self.canvas, (56, 189, 248), win_rect)
+
+        # 3. Obstacles
         for o in self.obstacles:
-            o.draw(self.screen)
+            o.draw(self.canvas)
 
-        # 3. Bullets
+        # 4. Bullets
         for b in self.bullets:
-            b.draw(self.screen)
+            b.draw(self.canvas)
 
-        # 4. Particles
+        # 5. Particles & Casings
         for p in self.particles:
-            p.draw(self.screen)
+            p.draw(self.canvas)
 
-        # 5. Player
-        self.player.draw(self.screen)
+        # 6. Player
+        self.player.draw(self.canvas)
 
-        # 6. Ground
+        # 7. Ground
         ground_rect = pygame.Rect(0, self.ground_y, SCREEN_WIDTH, self.ground_height)
-        pygame.draw.rect(self.screen, COLOR_GROUND, ground_rect)
+        pygame.draw.rect(self.canvas, COLOR_GROUND, ground_rect)
         pygame.draw.line(
-            self.screen,
+            self.canvas,
             COLOR_GROUND_LINE,
             (0, self.ground_y),
             (SCREEN_WIDTH, self.ground_y),
@@ -256,65 +381,82 @@ class Game:
         # Subtle ground grid dashes
         for x in range(0, SCREEN_WIDTH, 40):
             pygame.draw.line(
-                self.screen,
+                self.canvas,
                 (25, 28, 44),
                 (x, self.ground_y + 12),
                 (x + 20, self.ground_y + 12),
                 width=2,
             )
 
-        # 7. HUD & State Text
-        self._draw_hud()
+        # 8. Floating Score Popups
+        for ft in self.floating_texts:
+            ft.draw(self.canvas)
+
+        # 9. HUD & Menus
+        self._draw_hud(self.canvas)
+
+        # 10. Blit Canvas with Screen Shake Offset
+        dx, dy = self.camera.get_offset()
+        self.screen.fill((10, 11, 20))
+        self.screen.blit(self.canvas, (dx, dy))
 
         pygame.display.flip()
 
-    def _draw_hud(self):
+    def _draw_hud(self, surface):
         """Draw UI elements, status text, live score, and ammo meter."""
         # Ammo Meter
-        self._draw_ammo_meter()
+        self._draw_ammo_meter(surface)
 
         if self.state == GameState.READY:
             title_surf = self.font_title.render("RECOIL WING", True, COLOR_TEXT)
-            title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 180))
-            self.screen.blit(title_surf, title_rect)
+            title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 175))
+            surface.blit(title_surf, title_rect)
 
-            sub_surf = self.font_body.render("Press SPACE or CLICK to Shoot & Fly", True, COLOR_ACCENT)
-            sub_rect = sub_surf.get_rect(center=(SCREEN_WIDTH // 2, 230))
-            self.screen.blit(sub_surf, sub_rect)
+            sub_surf = self.font_body.render("Press SPACE or CLICK to Blast & Fly", True, COLOR_ACCENT)
+            sub_rect = sub_surf.get_rect(center=(SCREEN_WIDTH // 2, 225))
+            surface.blit(sub_surf, sub_rect)
 
-            hint_surf = self.font_small.render("[Milestone 3: Obstacles & Destructible Crates]", True, COLOR_TEXT_MUTED)
+            # High score display badge
+            if self.high_score > 0:
+                best_surf = self.font_badge.render(f"BEST RECORD: {self.high_score}", True, (250, 204, 21))
+                best_rect = best_surf.get_rect(center=(SCREEN_WIDTH // 2, 265))
+                surface.blit(best_surf, best_rect)
+
+            hint_surf = self.font_small.render("[Milestone 4: Screen Shake, Juicing & High Scores]", True, COLOR_TEXT_MUTED)
             hint_rect = hint_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30))
-            self.screen.blit(hint_surf, hint_rect)
+            surface.blit(hint_surf, hint_rect)
 
         elif self.state == GameState.PLAYING:
-            # Active Score display in top-center
+            # Active Score display in top-center with clean drop shadow
             score_str = str(self.score)
-            # Soft shadow
             shadow_surf = self.font_score.render(score_str, True, (15, 23, 42))
-            self.screen.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 98 + 2)))
-            # Foreground text
+            surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 98 + 2)))
             score_surf = self.font_score.render(score_str, True, COLOR_TEXT)
-            self.screen.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 98)))
+            surface.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 98)))
 
         elif self.state == GameState.GAME_OVER:
             # Game Over Box Modal
-            modal_rect = pygame.Rect(45, 180, SCREEN_WIDTH - 90, 240)
-            pygame.draw.rect(self.screen, (24, 27, 44), modal_rect, border_radius=12)
-            pygame.draw.rect(self.screen, (55, 62, 92), modal_rect, width=2, border_radius=12)
+            modal_rect = pygame.Rect(45, 175, SCREEN_WIDTH - 90, 260)
+            pygame.draw.rect(surface, (24, 27, 44), modal_rect, border_radius=12)
+            pygame.draw.rect(surface, (55, 62, 92), modal_rect, width=2, border_radius=12)
 
             go_surf = self.font_title.render("GAME OVER", True, COLOR_ACCENT)
-            self.screen.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 220)))
+            surface.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 215)))
 
             score_txt = self.font_body.render(f"SCORE: {self.score}", True, COLOR_TEXT)
-            self.screen.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 270)))
+            surface.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 262)))
 
-            best_txt = self.font_small.render(f"BEST SCORE: {self.high_score}", True, COLOR_TEXT_MUTED)
-            self.screen.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 305)))
+            # High Score with special New Best Ribbon
+            if self.is_new_best and self.score > 0:
+                best_txt = self.font_badge.render("★ NEW BEST RECORD! ★", True, (250, 204, 21))
+            else:
+                best_txt = self.font_small.render(f"BEST SCORE: {self.high_score}", True, COLOR_TEXT_MUTED)
+            surface.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 296)))
 
-            restart_surf = self.font_body.render("Press SPACE / R to Retry", True, (45, 212, 191))
-            self.screen.blit(restart_surf, restart_surf.get_rect(center=(SCREEN_WIDTH // 2, 360)))
+            retry_surf = self.font_body.render("Press SPACE / R to Retry", True, (45, 212, 191))
+            surface.blit(retry_surf, retry_surf.get_rect(center=(SCREEN_WIDTH // 2, 355)))
 
-    def _draw_ammo_meter(self):
+    def _draw_ammo_meter(self, surface):
         """Draw modern arcade cartridge pips representing available ammo."""
         pip_w = 22
         pip_h = 9
@@ -328,19 +470,19 @@ class Game:
             pip_rect = pygame.Rect(px, start_y, pip_w, pip_h)
 
             if i < self.player.ammo:
-                pygame.draw.rect(self.screen, COLOR_AMMO_FILLED, pip_rect, border_radius=3)
-                pygame.draw.rect(self.screen, (255, 255, 255), pip_rect, width=1, border_radius=3)
+                pygame.draw.rect(surface, COLOR_AMMO_FILLED, pip_rect, border_radius=3)
+                pygame.draw.rect(surface, (255, 255, 255), pip_rect, width=1, border_radius=3)
             elif i == self.player.ammo and self.player.ammo < MAX_AMMO:
-                pygame.draw.rect(self.screen, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
+                pygame.draw.rect(surface, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
                 progress = self.player.ammo_reload_timer / AMMO_RELOAD_FRAMES
                 progress_w = int(pip_w * progress)
                 if progress_w > 0:
                     fill_rect = pygame.Rect(px, start_y, progress_w, pip_h)
-                    pygame.draw.rect(self.screen, (34, 197, 94), fill_rect, border_radius=3)
-                pygame.draw.rect(self.screen, COLOR_AMMO_BORDER, pip_rect, width=1, border_radius=3)
+                    pygame.draw.rect(surface, (34, 197, 94), fill_rect, border_radius=3)
+                pygame.draw.rect(surface, COLOR_AMMO_BORDER, pip_rect, width=1, border_radius=3)
             else:
-                pygame.draw.rect(self.screen, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
-                pygame.draw.rect(self.screen, (40, 50, 70), pip_rect, width=1, border_radius=3)
+                pygame.draw.rect(surface, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
+                pygame.draw.rect(surface, (40, 50, 70), pip_rect, width=1, border_radius=3)
 
     def run(self):
         """Main game loop."""
@@ -349,5 +491,3 @@ class Game:
             self.update()
             self.draw()
             self.clock.tick(FPS)
-
-
