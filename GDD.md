@@ -149,10 +149,14 @@ recoil_wing/
   - [x] Perk **Hyper Piercer**: Laser ungu tembus rintangan dalam 1 garis lurus.
   - [x] HUD indikator active perk badge di pojok kiri atas.
 
-- [x] **Phase 2 - Milestone 6: Audio & Procedural Sound Effects (SFX)**
+- [x] **Phase 2 - Milestone 6: Audio, SFX & Background Music (BGM)**
   - [x] Generator sintesis audio prosedural tanpa ketergantungan download (`src/utils/audio_generator.py`).
   - [x] 8 file WAV efek suara sintetis: `shoot.wav`, `shotgun.wav`, `laser.wav`, `explosion.wav`, `portal.wav`, `shield_deflect.wav`, `score.wav`, `crash.wav`.
+  - [x] 1 file WAV musik synthwave 132 BPM seamless loop bawaan (`bgm_gameplay.wav`).
+  - [x] Sistem pemutar BGM streaming dengan prioritas otomatis untuk file custom pengguna (`bgm_gameplay.mp3` atau `.ogg`).
+  - [x] Audio ducking cerdas (volume musik melembut saat Game Over).
   - [x] SoundManager modular (`src/utils/sound_manager.py`) dengan multi-channel audio dan safe fallback.
-  - [x] Fitur mute cepat via tombol keyboard `M`.
+  - [x] Fitur mute cepat via tombol keyboard `M` (mute SFX & BGM sekaligus).
+
 
 

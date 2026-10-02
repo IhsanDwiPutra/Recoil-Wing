@@ -196,8 +196,74 @@ def generate_crash_sound():
     return samples
 
 
+def generate_synth_bgm():
+    """
+    Generates an energetic 132 BPM 4-bar seamless retro synthwave arcade loop.
+    Features rolling bassline, 16th-note lead arpeggios, and rhythmic cyber beats.
+    """
+    bpm = 132.0
+    beat_dur = 60.0 / bpm
+    total_beats = 16
+    total_duration = beat_dur * total_beats
+    total_samples = int(SAMPLE_RATE * total_duration)
+
+    step_dur = beat_dur / 4.0  # 16th note duration (~0.1136s)
+    total_steps = 64
+
+    # Bass root note frequencies per bar (D2, F2, G2, A2)
+    bar_roots = [73.42, 87.31, 98.00, 110.00]
+
+    # Lead arpeggio notes in D minor (D3, F3, A3, D4, F4, A4)
+    arp_notes = [146.83, 174.61, 220.00, 293.66, 349.23, 440.00]
+
+    samples = []
+    for i in range(total_samples):
+        t = i / SAMPLE_RATE
+        cur_beat = t / beat_dur
+        cur_bar = int(cur_beat / 4.0) % 4
+        cur_step = int(t / step_dur) % total_steps
+
+        # 1. Rolling Synth Bass
+        step_t = (t % step_dur) / step_dur
+        bass_freq = bar_roots[cur_bar]
+        # Octave jump on every 4th step for funk groove
+        if cur_step % 4 in (1, 3):
+            bass_freq *= 2.0
+        bass_phase = 2.0 * math.pi * bass_freq * t
+        bass_wave = math.sin(bass_phase) * 0.6 + math.sin(bass_phase * 2.0) * 0.25
+        bass_env = math.exp(-step_t * 5.0)
+        bass_val = bass_wave * bass_env
+
+        # 2. Lead Arpeggio
+        arp_idx = (cur_step * 3) % len(arp_notes)
+        arp_freq = arp_notes[arp_idx]
+        arp_phase = 2.0 * math.pi * arp_freq * t
+        # Triangle wave for sleek retro synth
+        arp_wave = (math.asin(math.sin(arp_phase)) * (2.0 / math.pi))
+        arp_env = math.exp(-step_t * 4.0)
+        arp_val = arp_wave * arp_env * 0.35
+
+        # 3. Cyber Drum Percussion (Kick on beats, Hi-hat on 16ths)
+        beat_t = (t % beat_dur) / beat_dur
+        # Kick thump on quarter notes
+        kick_freq = 110.0 * math.exp(-beat_t * 18.0) + 40.0
+        kick_wave = math.sin(2.0 * math.pi * kick_freq * t)
+        kick_env = math.exp(-beat_t * 12.0)
+        kick_val = kick_wave * kick_env * 0.55
+
+        # Hi-hat tick
+        hat_env = math.exp(-step_t * 22.0)
+        hat_val = (random.uniform(-1.0, 1.0) * hat_env * 0.15) if (cur_step % 2 == 1) else 0.0
+
+        # Master mix
+        mix = bass_val * 0.55 + arp_val * 0.50 + kick_val * 0.60 + hat_val * 0.30
+        samples.append(clamp(mix * 0.75))
+
+    return samples
+
+
 def generate_all_sounds(output_dir):
-    """Generates all 8 game sound effects into target directory."""
+    """Generates all game sound effects and default synth BGM."""
     os.makedirs(output_dir, exist_ok=True)
     sound_generators = {
         "shoot.wav": generate_shoot_sound,
@@ -208,6 +274,7 @@ def generate_all_sounds(output_dir):
         "shield_deflect.wav": generate_shield_deflect_sound,
         "score.wav": generate_score_sound,
         "crash.wav": generate_crash_sound,
+        "bgm_gameplay.wav": generate_synth_bgm,
     }
 
     generated_paths = []
@@ -223,4 +290,5 @@ def generate_all_sounds(output_dir):
 if __name__ == "__main__":
     sounds_folder = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sounds")
     paths = generate_all_sounds(sounds_folder)
-    print(f"Successfully generated {len(paths)} sound effects in {sounds_folder}")
+    print(f"Successfully generated {len(paths)} sound effects + BGM in {sounds_folder}")
+

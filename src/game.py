@@ -70,6 +70,9 @@ class Game:
         self.canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.camera = Camera()
         self.sound_mgr = SoundManager()
+        # Start background music loop
+        self.sound_mgr.play_bgm()
+
 
 
         # Fonts
@@ -244,6 +247,7 @@ class Game:
         self.score = 0
         self.is_new_best = False
         self.ready_timer = 0.0
+        self.sound_mgr.restore_bgm()
 
     def trigger_game_over(self):
         """Transitions into Game Over and checks high score record."""
@@ -251,10 +255,12 @@ class Game:
             self.state = GameState.GAME_OVER
             self.camera.add_trauma(0.70)
             self.sound_mgr.play("crash", 0.9)
+            self.sound_mgr.duck_bgm()
             if self.score > self.high_score:
                 self.high_score = self.score
                 self.is_new_best = True
                 self.save_high_score(self.high_score)
+
 
 
     def update(self):
