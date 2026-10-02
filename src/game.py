@@ -46,6 +46,7 @@ from src.entities.perks import (
 )
 from src.utils.camera import Camera
 from src.utils.sound_manager import SoundManager
+from src.entities.weather import WeatherManager
 
 
 class GameState:
@@ -88,13 +89,24 @@ class Game:
         self.ground_height = 80
         self.ground_y = SCREEN_HEIGHT - self.ground_height
 
-        # Pre-render background gradient
-        self.bg_surface = self._create_gradient_surface(
+        # Pre-render sector background gradients (Dynamic Biome)
+        self.bg_sector1 = self._create_gradient_surface(
             SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BG_TOP, COLOR_BG_BOTTOM
         )
+        self.bg_sector2 = self._create_gradient_surface(
+            SCREEN_WIDTH, SCREEN_HEIGHT, (10, 24, 34), (16, 46, 56)
+        )
+        self.bg_sector3 = self._create_gradient_surface(
+            SCREEN_WIDTH, SCREEN_HEIGHT, (38, 12, 24), (64, 18, 38)
+        )
+        self.bg_surface = self.bg_sector1
 
         # Parallax City Skyline
         self.buildings = self._generate_skyline()
+
+        # Dynamic Weather & Biome Manager
+        self.weather = WeatherManager(self.ground_y, self.font_body, self.font_badge)
+        self.weather.set_sector(1)
 
         # High score persistence
         self.high_score = self.load_high_score()
@@ -257,6 +269,7 @@ class Game:
         self.combo_max = 0
         self.is_new_best = False
         self.ready_timer = 0.0
+        self.weather.reset()
         self.sound_mgr.restore_bgm()
 
     def trigger_game_over(self):
@@ -277,6 +290,9 @@ class Game:
         """Update game logic."""
         # Camera trauma decay
         self.camera.update()
+
+        # Dynamic Weather FX & Sector Progression
+        self.weather.update(self.score, self.sound_mgr)
 
         # Parallax Skyline scrolling
         skyline_speed = PIPE_SPEED * 0.35 if self.state == GameState.PLAYING else 0.4
@@ -548,9 +564,17 @@ class Game:
                     self.player.y = self.ground_y - self.player.height // 2
 
     def draw(self):
-        """Render frame with camera screen shake."""
-        # 1. Background Gradient
-        self.canvas.blit(self.bg_surface, (0, 0))
+        """Render frame with camera screen shake, dynamic biomes, and weather FX."""
+        # 1. Background Gradient (Dynamic Sector Biome)
+        if self.weather.current_sector == 2:
+            self.canvas.blit(self.bg_sector2, (0, 0))
+            win_color = (74, 222, 128)  # Acid green skyline windows
+        elif self.weather.current_sector == 3:
+            self.canvas.blit(self.bg_sector3, (0, 0))
+            win_color = (244, 63, 94)   # Solar rose skyline windows
+        else:
+            self.canvas.blit(self.bg_sector1, (0, 0))
+            win_color = (56, 189, 248)  # Neon cyan skyline windows
 
         # 2. Parallax Skyline
         for b in self.buildings:
@@ -560,7 +584,10 @@ class Game:
             pygame.draw.rect(self.canvas, (33, 38, 64), b_rect, width=1)
             for wx, wy in b['windows']:
                 win_rect = pygame.Rect(int(b['x']) + wx, by + wy, 3, 4)
-                pygame.draw.rect(self.canvas, (56, 189, 248), win_rect)
+                pygame.draw.rect(self.canvas, win_color, win_rect)
+
+        # 2.5. Ambient Background Weather (Lightning Flash & Floating Embers)
+        self.weather.draw_background_fx(self.canvas)
 
         # 3. Choice Gates (In-Flight Portals)
         for g in self.gates:
@@ -600,6 +627,9 @@ class Game:
                 (x + 20, self.ground_y + 12),
                 width=2,
             )
+
+        # 8.5. Foreground Weather FX (Raindrops, Water Splashes & Sector Banner)
+        self.weather.draw_foreground_fx(self.canvas)
 
         # 9. Floating Score Popups
         for ft in self.floating_texts:

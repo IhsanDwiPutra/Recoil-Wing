@@ -177,6 +177,14 @@ recoil_wing/
   - [x] HUD Arcade Combo Badge: Indikator pill box menyala di bawah skor dengan depleting timer bar horizontal.
   - [x] Rekap statistik **MAX STREAK** di layar Game Over modal.
 
+- [x] **Phase 5 - Milestone 9: Dynamic Biome & Atmospheric Weather Shifting**
+  - [x] Modul cuaca & bioma prosedural (`src/entities/weather.py`) dengan optimasi partikel strictly-capped (60 FPS stabil).
+  - [x] **Sektor 1 (Skor 0 - 14): Neon Downtown**: Langit malam indigo tenang, jendela kota neon cyan, dan partikel udara bersih.
+  - [x] **Sektor 2 (Skor 15 - 29): Acid Rain District**: Gradien langit petrol/dark teal, hujan asam cyber miring (`RainDrop`), percikan air di lantai (`SplashParticle`), kilatan petir latar ambient, dan jendela gedung hijau asam.
+  - [x] **Sektor 3 (Skor 30+): Solar Overdrive**: Gradien merah crimson senja cyberpunk, partikel bara api melayang naik dengan sinusoidal drift (`EmberParticle`), dan jendela gedung rose red.
+  - [x] **Holographic Sector Transition Banner**: Notifikasi banner futuristik bersudut tekno yang meluncur dari atas layar saat memasuki sektor baru dengan audio cue halus.
+
+
 
 
 
