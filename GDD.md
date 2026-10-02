@@ -169,6 +169,15 @@ recoil_wing/
   - [x] Sistem debris sibernetik (`create_drone_debris`) dengan serpihan logam gelap, percikan api merah dan percikan listrik neon.
   - [x] Interaksi Energy Shield: Shield kinetik dapat menghancurkan drone seketika saat bertabrakan tanpa mematikan player.
 
+- [x] **Phase 4 - Milestone 8: Dynamic Combo Multiplier & Streak System**
+  - [x] Sistem Streak Combo bertingkat (`x2 COMBO`, `x3 SUPER`, `x4 ULTRA`, `x5+ HYPER STREAK`) saat menghancurkan drone & peti berturut-turut.
+  - [x] Skor multiplier dinamis (`base_score * combo_multiplier`) dengan popup teks animasi berwarna sesuai tingkatan tier.
+  - [x] Timer jendela combo (~2.6 detik) dengan perpanjangan waktu saat berhasil melintasi celah pipa atau portal choice gate.
+  - [x] Visual **Luminous Afterimage Motion Trail**: Karakter burung mengeluarkan siluet bayangan berkecepatan tinggi yang berubah warna sesuai tier combo (Teal ➔ Gold ➔ Rose ➔ Cosmic Violet).
+  - [x] HUD Arcade Combo Badge: Indikator pill box menyala di bawah skor dengan depleting timer bar horizontal.
+  - [x] Rekap statistik **MAX STREAK** di layar Game Over modal.
+
+
 
 
 

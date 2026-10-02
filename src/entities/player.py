@@ -54,6 +54,9 @@ class Player:
         # Visual kickback offset when firing
         self.kickback_y = 0.0
 
+        # Combo Streak Afterimage Trail
+        self.trail_history = []
+
     @property
     def rect(self):
         """Bounding box for collision detection."""
@@ -136,8 +139,8 @@ class Player:
 
         return bullets
 
-    def update(self, dt=1.0):
-        """Update physics, position, ammo reload, and rotation tilt."""
+    def update(self, dt=1.0, combo_count=0):
+        """Update physics, position, ammo reload, rotation tilt, and combo trail."""
         # Shield pulse animation
         if self.shield_charges > 0:
             self.shield_pulse += 0.08
@@ -175,8 +178,36 @@ class Player:
 
         self.rotation += (self.target_rotation - self.rotation) * 0.18
 
+        # Combo Afterimage Trail Recording
+        if combo_count >= 2 and self.is_alive:
+            self.trail_history.append((self.x, self.y, self.rotation, combo_count))
+            if len(self.trail_history) > 6:
+                self.trail_history.pop(0)
+        else:
+            if self.trail_history:
+                self.trail_history.pop(0)
+
     def draw(self, surface):
-        """Draw stylized cyber-bird and active energy shield if equipped."""
+        """Draw stylized cyber-bird, combo afterimage trail, and active energy shield."""
+        # 0. Combo Streak Afterimage Motion Trail
+        if self.trail_history:
+            for idx, (tx, ty, trot, tcombo) in enumerate(self.trail_history):
+                ratio = (idx + 1) / len(self.trail_history)
+                alpha = int(75 * ratio)
+                if tcombo == 2:
+                    tcolor = (45, 212, 191, alpha)   # Neon Teal
+                elif tcombo == 3:
+                    tcolor = (250, 204, 21, alpha)   # Electric Gold
+                elif tcombo == 4:
+                    tcolor = (244, 63, 94, alpha)    # Hyper Rose
+                else:
+                    tcolor = (168, 85, 247, alpha)   # Cosmic Violet
+
+                ghost_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+                pygame.draw.ellipse(ghost_surf, tcolor, (0, 0, self.width, self.height))
+                rot_ghost = pygame.transform.rotate(ghost_surf, -trot)
+                surface.blit(rot_ghost, rot_ghost.get_rect(center=(int(tx), int(ty))))
+
         # 1. Energy Shield Bubble
         if self.shield_charges > 0:
             shield_radius = int(self.width * 0.85 + math.sin(self.shield_pulse) * 3)
@@ -273,3 +304,4 @@ class Player:
         self.ammo = self.max_ammo
         self.ammo_reload_timer = 0
         self.muzzle_flash_timer = 0
+        self.trail_history.clear()

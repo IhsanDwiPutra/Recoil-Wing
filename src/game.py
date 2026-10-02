@@ -116,6 +116,12 @@ class Game:
         self.active_perks = []
         self.claimed_milestones = set()
 
+        # Dynamic Combo & Streak System
+        self.combo_count = 0
+        self.combo_timer = 0
+        self.combo_max = 0
+        self.combo_max_time = 155  # ~2.6 seconds timeout window
+
     def _generate_skyline(self):
         """Generates initial silhouette skyline buildings for parallax."""
         buildings = []
@@ -246,6 +252,9 @@ class Game:
         self.pipe_spawn_timer = 0
         self.state = GameState.READY
         self.score = 0
+        self.combo_count = 0
+        self.combo_timer = 0
+        self.combo_max = 0
         self.is_new_best = False
         self.ready_timer = 0.0
         self.sound_mgr.restore_bgm()
@@ -285,7 +294,17 @@ class Game:
             self.player.rotation = 0.0
 
         elif self.state == GameState.PLAYING:
-            self.player.update()
+            self.player.update(combo_count=self.combo_count)
+
+            # Combo Timer Decay & Streak End Check
+            if self.combo_timer > 0:
+                self.combo_timer -= 1
+                if self.combo_timer == 0:
+                    if self.combo_count >= 2:
+                        self.floating_texts.append(
+                            FloatingText(f"STREAK END: {self.combo_count}x", self.player.x, self.player.y - 28, (148, 163, 184), self.font_badge)
+                        )
+                    self.combo_count = 0
 
             # 1. Milestone Check: Spawn In-Flight Choice Gate Pair
             for threshold in UPGRADE_THRESHOLDS:
@@ -324,11 +343,19 @@ class Game:
                 # Pass Gate Score
                 if not g.passed and self.player.x > g.x + g.width:
                     g.passed = True
-                    self.score += 1
+                    if self.combo_count >= 2:
+                        bonus = min(3, self.combo_count)
+                        self.score += bonus
+                        self.combo_timer = min(self.combo_max_time, self.combo_timer + 30)
+                        self.floating_texts.append(
+                            FloatingText(f"+{bonus}", self.player.x + 20, self.player.y - 12, (250, 204, 21), self.font_score_label)
+                        )
+                    else:
+                        self.score += 1
+                        self.floating_texts.append(
+                            FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
+                        )
                     self.sound_mgr.play("score", 0.45)
-                    self.floating_texts.append(
-                        FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
-                    )
 
             self.gates = [g for g in self.gates if g.x + g.width > -40]
 
@@ -338,11 +365,19 @@ class Game:
 
                 if not o.passed and self.player.x > o.x + o.width:
                     o.passed = True
-                    self.score += 1
+                    if self.combo_count >= 2:
+                        bonus = min(3, self.combo_count)
+                        self.score += bonus
+                        self.combo_timer = min(self.combo_max_time, self.combo_timer + 25)
+                        self.floating_texts.append(
+                            FloatingText(f"+{bonus}", self.player.x + 20, self.player.y - 12, (250, 204, 21), self.font_score_label)
+                        )
+                    else:
+                        self.score += 1
+                        self.floating_texts.append(
+                            FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
+                        )
                     self.sound_mgr.play("score", 0.45)
-                    self.floating_texts.append(
-                        FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
-                    )
 
                 # Player collision with solid pipe or intact crate/drone
                 if o.collides_with_player(self.player.rect):
@@ -383,18 +418,36 @@ class Game:
                         if hit_type == "drone":
                             if destroyed:
                                 self.particles.extend(create_drone_debris(hx, hy, count=16))
-                                self.score += 2  # Tactical drone takedown reward!
-                                self.camera.add_trauma(0.38)
+                                self.combo_count += 1
+                                self.combo_timer = self.combo_max_time
+                                self.combo_max = max(self.combo_max, self.combo_count)
+                                mult = min(5, self.combo_count)
+                                earned_score = 2 * mult
+                                self.score += earned_score
+                                self.camera.add_trauma(0.38 + 0.04 * mult)
                                 self.sound_mgr.play("explosion", 0.95)
 
                                 # Downwell-style aerial combo reward: instant +1 ammo refund!
+                                refund_tag = ""
                                 if self.player.ammo < self.player.max_ammo:
                                     self.player.ammo += 1
-                                    popup_text = "+2 DRONE! (+1 AMMO)"
-                                    text_color = (45, 212, 191)  # Teal
+                                    refund_tag = " (+1 AMMO)"
+
+                                if self.combo_count == 1:
+                                    popup_text = f"+{earned_score} DRONE!{refund_tag}"
+                                    text_color = (244, 63, 94)
+                                elif self.combo_count == 2:
+                                    popup_text = f"+{earned_score} (x2 COMBO!){refund_tag}"
+                                    text_color = (45, 212, 191)
+                                elif self.combo_count == 3:
+                                    popup_text = f"+{earned_score} (x3 SUPER!){refund_tag}"
+                                    text_color = (250, 204, 21)
+                                elif self.combo_count == 4:
+                                    popup_text = f"+{earned_score} (x4 ULTRA!){refund_tag}"
+                                    text_color = (244, 63, 94)
                                 else:
-                                    popup_text = "+2 DRONE!"
-                                    text_color = (244, 63, 94)   # Rose red
+                                    popup_text = f"+{earned_score} (x{mult} HYPER!){refund_tag}"
+                                    text_color = (168, 85, 247)
 
                                 self.floating_texts.append(
                                     FloatingText(popup_text, hx, hy - 16, text_color, self.font_body)
@@ -405,11 +458,33 @@ class Game:
                         elif hit_type == "crate":
                             if destroyed:
                                 self.particles.extend(create_crate_debris(hx, hy, count=16))
-                                self.score += 2  # Tactical demolition reward!
-                                self.camera.add_trauma(0.40)
+                                self.combo_count += 1
+                                self.combo_timer = self.combo_max_time
+                                self.combo_max = max(self.combo_max, self.combo_count)
+                                mult = min(5, self.combo_count)
+                                earned_score = 2 * mult
+                                self.score += earned_score
+                                self.camera.add_trauma(0.40 + 0.04 * mult)
                                 self.sound_mgr.play("explosion", 0.9)
+
+                                if self.combo_count == 1:
+                                    popup_text = f"+{earned_score} CRATE!"
+                                    text_color = (250, 204, 21)
+                                elif self.combo_count == 2:
+                                    popup_text = f"+{earned_score} (x2 COMBO!)"
+                                    text_color = (45, 212, 191)
+                                elif self.combo_count == 3:
+                                    popup_text = f"+{earned_score} (x3 SUPER!)"
+                                    text_color = (250, 204, 21)
+                                elif self.combo_count == 4:
+                                    popup_text = f"+{earned_score} (x4 ULTRA!)"
+                                    text_color = (244, 63, 94)
+                                else:
+                                    popup_text = f"+{earned_score} (x{mult} HYPER!)"
+                                    text_color = (168, 85, 247)
+
                                 self.floating_texts.append(
-                                    FloatingText("+2 CRATE!", hx, hy - 14, (250, 204, 21), self.font_body)
+                                    FloatingText(popup_text, hx, hy - 14, text_color, self.font_body)
                                 )
                             else:
                                 self.particles.extend(create_spark_burst(hx, hy, count=5))
@@ -570,25 +645,76 @@ class Game:
             score_surf = self.font_score.render(score_str, True, COLOR_TEXT)
             surface.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 98)))
 
+            # Active Arcade Combo Badge & Gauge
+            self._draw_combo_meter(surface)
+
         elif self.state == GameState.GAME_OVER:
-            modal_rect = pygame.Rect(45, 175, SCREEN_WIDTH - 90, 260)
+            modal_rect = pygame.Rect(45, 170, SCREEN_WIDTH - 90, 275)
             pygame.draw.rect(surface, (24, 27, 44), modal_rect, border_radius=12)
             pygame.draw.rect(surface, (55, 62, 92), modal_rect, width=2, border_radius=12)
 
             go_surf = self.font_title.render("GAME OVER", True, COLOR_ACCENT)
-            surface.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 215)))
+            surface.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 210)))
 
-            score_txt = self.font_body.render(f"SCORE: {self.score}", True, COLOR_TEXT)
-            surface.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 262)))
+            score_txt = self.font_body.render(f"FINAL SCORE: {self.score}", True, COLOR_TEXT)
+            surface.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 255)))
+
+            # Best Combo Streak
+            streak_color = (250, 204, 21) if self.combo_max >= 3 else (45, 212, 191) if self.combo_max >= 2 else COLOR_TEXT_MUTED
+            streak_txt = self.font_badge.render(f"MAX STREAK: {self.combo_max}x COMBO", True, streak_color)
+            surface.blit(streak_txt, streak_txt.get_rect(center=(SCREEN_WIDTH // 2, 288)))
 
             if self.is_new_best and self.score > 0:
                 best_txt = self.font_badge.render("★ NEW BEST RECORD! ★", True, (250, 204, 21))
             else:
-                best_txt = self.font_small.render(f"BEST SCORE: {self.high_score}", True, COLOR_TEXT_MUTED)
-            surface.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 296)))
+                best_txt = self.font_small.render(f"BEST RECORD: {self.high_score}", True, COLOR_TEXT_MUTED)
+            surface.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 320)))
 
             retry_surf = self.font_body.render("Press SPACE / R to Retry", True, (45, 212, 191))
-            surface.blit(retry_surf, retry_surf.get_rect(center=(SCREEN_WIDTH // 2, 355)))
+            surface.blit(retry_surf, retry_surf.get_rect(center=(SCREEN_WIDTH // 2, 380)))
+
+    def _draw_combo_meter(self, surface):
+        """Displays pulsating arcade combo streak badge with depleting timer gauge."""
+        if self.combo_count < 2 or self.state != GameState.PLAYING:
+            return
+
+        mult = min(5, self.combo_count)
+        if mult == 2:
+            tier_name = "x2 COMBO!"
+            tier_color = (45, 212, 191)  # Neon Teal
+        elif mult == 3:
+            tier_name = "x3 SUPER!"
+            tier_color = (250, 204, 21)  # Electric Gold
+        elif mult == 4:
+            tier_name = "x4 ULTRA!"
+            tier_color = (244, 63, 94)   # Hyper Rose
+        else:
+            tier_name = f"x{mult} HYPER STREAK!"
+            tier_color = (168, 85, 247)  # Cosmic Violet
+
+        badge_w = 130
+        badge_h = 32
+        badge_x = SCREEN_WIDTH // 2 - badge_w // 2
+        badge_y = 138
+
+        # Translucent dark pill backing
+        pill_surf = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
+        pygame.draw.rect(pill_surf, (15, 23, 42, 225), (0, 0, badge_w, badge_h), border_radius=8)
+        pygame.draw.rect(pill_surf, tier_color, (0, 0, badge_w, badge_h), width=2, border_radius=8)
+        surface.blit(pill_surf, (badge_x, badge_y))
+
+        # Combo Title Text
+        combo_text = self.font_badge.render(tier_name, True, tier_color)
+        surface.blit(combo_text, combo_text.get_rect(center=(badge_x + badge_w // 2, badge_y + 12)))
+
+        # Depleting Combo Timer Bar
+        timer_ratio = max(0.0, min(1.0, self.combo_timer / self.combo_max_time))
+        gauge_w = int((badge_w - 18) * timer_ratio)
+        gauge_bg = pygame.Rect(badge_x + 9, badge_y + 24, badge_w - 18, 3)
+        pygame.draw.rect(surface, (51, 65, 85), gauge_bg, border_radius=2)
+        if gauge_w > 0:
+            gauge_fill = pygame.Rect(badge_x + 9, badge_y + 24, gauge_w, 3)
+            pygame.draw.rect(surface, tier_color, gauge_fill, border_radius=2)
 
     def _draw_active_perks_hud(self, surface):
         """Displays currently equipped perks as badges in top-left."""
