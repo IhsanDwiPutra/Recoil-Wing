@@ -1,11 +1,15 @@
 """
 Main entry point for Recoil Wing.
+Supports both native desktop and Pygbag (Android / Web / PWA).
 """
+import asyncio
 from src.game import Game
 
-def main():
+
+async def main():
     game = Game()
-    game.run()
+    await game.run()
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

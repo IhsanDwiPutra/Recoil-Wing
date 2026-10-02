@@ -7,6 +7,7 @@ import os
 import sys
 import math
 import random
+import asyncio
 import pygame
 
 from src.config import (
@@ -908,10 +909,11 @@ class Game:
         hint_surf = self.font_small.render("Press ESC or P to Resume", True, (148, 163, 184))
         surface.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, 445)))
 
-    def run(self):
-        """Main game loop."""
+    async def run(self):
+        """Main game loop (asyncio / pygbag compatible)."""
         while True:
             self.handle_input()
             self.update()
             self.draw()
+            await asyncio.sleep(0)
             self.clock.tick(FPS)
