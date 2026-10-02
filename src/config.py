@@ -27,6 +27,15 @@ BULLET_SPEED = 15.0
 BULLET_WIDTH = 6
 BULLET_HEIGHT = 14
 
+# Obstacle & Pipe Settings
+PIPE_SPEED = 2.6
+PIPE_SPAWN_FRAMES = 115       # Spawn interval in frames (~1.9s at 60 FPS)
+PIPE_WIDTH = 64
+PIPE_GAP = 175                # Vertical gap between top and bottom pipe
+PIPE_MIN_HEIGHT = 70          # Minimum length for top/bottom pipes
+CRATE_SIZE = 44               # Destructible crate block dimension
+
+
 # Colors (Modern Arcade Palette)
 COLOR_BG_TOP = (18, 20, 36)         # Deep Navy
 COLOR_BG_BOTTOM = (28, 30, 52)      # Indigo

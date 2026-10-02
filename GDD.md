@@ -118,10 +118,13 @@ recoil_wing/
   - [x] Sistem batasan amunisi & indikator recharge pips di HUD.
   - [x] Visual muzzle flash & kickback animation pada moncong senjata.
 
-- [ ] **Milestone 3: Rintangan Interaktif & Destructible Blocks**
-  - [ ] Generator pipa bergulir dari kanan ke kiri.
-  - [ ] Variasi rintangan: Pipa padat dan balok yang bisa ditembak hancur.
-  - [ ] Collision detection (Pemain vs Pipa/Balok, Peluru vs Balok).
+- [x] **Milestone 3: Rintangan Interaktif & Destructible Blocks**
+  - [x] Generator pipa bergulir dari kanan ke kiri dengan visual industrial shading.
+  - [x] Variasi rintangan: Pipa padat dan peti bahaya (*hazard crate*) yang bisa ditembak hancur.
+  - [x] Collision detection lengkap (Pemain vs Pipa/Balok, Peluru vs Balok/Pipa).
+  - [x] Sistem partikel puing ledakan (*crate debris burst*) dan percikan api logam (*sparks*).
+  - [x] Sistem skor rintangan (+1) dan bonus skor penghancuran peti (+2).
+
 - [ ] **Milestone 4: Game Loop, Scoring, & Polish (Juicing)**
   - [ ] Layar Title / Ready, In-Game, dan Game Over screen.
   - [ ] Sistem penghitungan skor & High Score.
