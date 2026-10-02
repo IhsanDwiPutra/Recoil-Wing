@@ -15,6 +15,8 @@ class SoundManager:
         self.master_volume = 0.85
         self.bgm_volume = 0.38
         self.bgm_playing = False
+        self.sfx_enabled = True
+        self.bgm_enabled = True
 
         if sounds_dir is None:
             sounds_dir = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sounds")
@@ -62,7 +64,7 @@ class SoundManager:
 
     def play(self, sound_name, volume=1.0):
         """Plays a loaded sound effect with custom volume."""
-        if not self.enabled or self.muted:
+        if not self.enabled or self.muted or not self.sfx_enabled:
             return
 
         sound = self.sounds.get(sound_name)
@@ -103,7 +105,7 @@ class SoundManager:
 
         try:
             pygame.mixer.music.load(music_file)
-            vol = 0.0 if self.muted else self.bgm_volume
+            vol = self.bgm_volume if (self.bgm_enabled and not self.muted) else 0.0
             pygame.mixer.music.set_volume(vol)
             pygame.mixer.music.play(loops=-1)  # Infinite seamless loop
             self.bgm_playing = True
@@ -114,7 +116,7 @@ class SoundManager:
 
     def duck_bgm(self):
         """Softens background music volume during Game Over."""
-        if self.enabled and not self.muted:
+        if self.enabled and not self.muted and self.bgm_enabled:
             try:
                 pygame.mixer.music.set_volume(self.bgm_volume * 0.35)
             except Exception:
@@ -122,7 +124,7 @@ class SoundManager:
 
     def restore_bgm(self):
         """Restores normal background music volume."""
-        if self.enabled and not self.muted:
+        if self.enabled and not self.muted and self.bgm_enabled:
             try:
                 pygame.mixer.music.set_volume(self.bgm_volume)
             except Exception:
@@ -133,10 +135,28 @@ class SoundManager:
         self.muted = not self.muted
         if self.enabled:
             try:
-                if self.muted:
+                if self.muted or not self.bgm_enabled:
                     pygame.mixer.music.set_volume(0.0)
                 else:
                     pygame.mixer.music.set_volume(self.bgm_volume)
             except Exception:
                 pass
         return self.muted
+
+    def toggle_bgm(self):
+        """Toggles BGM state on or off."""
+        self.bgm_enabled = not self.bgm_enabled
+        if self.enabled:
+            try:
+                if not self.bgm_enabled or self.muted:
+                    pygame.mixer.music.set_volume(0.0)
+                else:
+                    pygame.mixer.music.set_volume(self.bgm_volume)
+            except Exception:
+                pass
+        return self.bgm_enabled
+
+    def toggle_sfx(self):
+        """Toggles SFX state on or off."""
+        self.sfx_enabled = not self.sfx_enabled
+        return self.sfx_enabled

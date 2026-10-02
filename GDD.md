@@ -182,7 +182,15 @@ recoil_wing/
   - [x] **Sektor 1 (Skor 0 - 14): Neon Downtown**: Langit malam indigo tenang, jendela kota neon cyan, dan partikel udara bersih.
   - [x] **Sektor 2 (Skor 15 - 29): Acid Rain District**: Gradien langit petrol/dark teal, hujan asam cyber miring (`RainDrop`), percikan air di lantai (`SplashParticle`), kilatan petir latar ambient, dan jendela gedung hijau asam.
   - [x] **Sektor 3 (Skor 30+): Solar Overdrive**: Gradien merah crimson senja cyberpunk, partikel bara api melayang naik dengan sinusoidal drift (`EmberParticle`), dan jendela gedung rose red.
-  - [x] **Holographic Sector Transition Banner**: Notifikasi banner futuristik bersudut tekno yang meluncur dari atas layar saat memasuki sektor baru dengan audio cue halus.
+  - [x] **Phase 5 - Milestone 10: In-Game Pause Menu & Audio Settings (Mobile/Touch Ready)**
+  - [x] State `GameState.PAUSED` dengan penghentian total (freeze) simulasi dunia game (timer combo, posisi musuh/peluru, dan cuaca terhenti tanpa hilang).
+  - [x] On-screen touchable pause button `❚❚` di sudut kanan atas layar (`x = SCREEN_WIDTH - 44, y = 16`), ramah layar sentuh (Android/Mobile) maupun klik mouse.
+  - [x] Dukungan hotkey keyboard fisik (`ESC` atau `P`) untuk pause/resume instan.
+  - [x] Modal popup Glassmorphic modern dengan panel gelap transparan:
+    - Tombol `▶ RESUME` (kembali ke permainan).
+    - Tombol `↺ RESTART` (mengulang permainan langsung).
+    - Pengaturan Audio independen: Tombol toggle `BGM: ON / OFF` dan `SFX: ON / OFF`.
+  - [x] Indikator skor berjalan tetap tampak di dalam modal saat dijeda.
 
 
 

@@ -52,6 +52,7 @@ from src.entities.weather import WeatherManager
 class GameState:
     READY = "ready"
     PLAYING = "playing"
+    PAUSED = "paused"
     GAME_OVER = "game_over"
 
 
@@ -74,8 +75,6 @@ class Game:
         self.sound_mgr = SoundManager()
         # Start background music loop
         self.sound_mgr.play_bgm()
-
-
 
         # Fonts
         self.font_score = pygame.font.SysFont("Trebuchet MS", 52, bold=True)
@@ -111,6 +110,14 @@ class Game:
         # High score persistence
         self.high_score = self.load_high_score()
         self.is_new_best = False
+
+        # UI Interactive Rectangles (Mobile & Mouse friendly)
+        self.pause_btn_rect = pygame.Rect(SCREEN_WIDTH - 44, 16, 28, 28)
+        self.btn_resume = pygame.Rect(70, 260, SCREEN_WIDTH - 140, 42)
+        self.btn_restart = pygame.Rect(70, 314, SCREEN_WIDTH - 140, 42)
+        half_btn_w = (SCREEN_WIDTH - 150) // 2
+        self.btn_bgm = pygame.Rect(70, 368, half_btn_w, 40)
+        self.btn_sfx = pygame.Rect(70 + half_btn_w + 10, 368, half_btn_w, 40)
 
         # Entities & States
         self.player = Player()
@@ -191,8 +198,16 @@ class Game:
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
-                    self.on_jump_action()
+                if event.key in (pygame.K_ESCAPE, pygame.K_p):
+                    if self.state == GameState.PLAYING:
+                        self.state = GameState.PAUSED
+                    elif self.state == GameState.PAUSED:
+                        self.state = GameState.PLAYING
+                elif event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
+                    if self.state == GameState.PAUSED:
+                        self.state = GameState.PLAYING
+                    else:
+                        self.on_jump_action()
                 elif event.key == pygame.K_r:
                     self.reset_game()
                 elif event.key == pygame.K_m:
@@ -203,8 +218,23 @@ class Game:
                     )
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left Click
-                    self.on_jump_action()
+                if event.button == 1:  # Left Click or Mobile Touch
+                    if self.state == GameState.PAUSED:
+                        if self.btn_resume.collidepoint(event.pos):
+                            self.state = GameState.PLAYING
+                        elif self.btn_restart.collidepoint(event.pos):
+                            self.reset_game()
+                        elif self.btn_bgm.collidepoint(event.pos):
+                            self.sound_mgr.toggle_bgm()
+                        elif self.btn_sfx.collidepoint(event.pos):
+                            self.sound_mgr.toggle_sfx()
+                    elif self.state == GameState.PLAYING:
+                        if self.pause_btn_rect.collidepoint(event.pos):
+                            self.state = GameState.PAUSED
+                        else:
+                            self.on_jump_action()
+                    else:
+                        self.on_jump_action()
 
     def on_jump_action(self):
         """Handle jump/recoil action across different states."""
@@ -288,6 +318,9 @@ class Game:
 
     def update(self):
         """Update game logic."""
+        if self.state == GameState.PAUSED:
+            return
+
         # Camera trauma decay
         self.camera.update()
 
@@ -669,6 +702,7 @@ class Game:
             surface.blit(hint_surf, hint_rect)
 
         elif self.state == GameState.PLAYING:
+            self._draw_pause_button(surface)
             score_str = str(self.score)
             shadow_surf = self.font_score.render(score_str, True, (15, 23, 42))
             surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 124 + 2)))
@@ -677,6 +711,14 @@ class Game:
 
             # Active Arcade Combo Badge & Gauge
             self._draw_combo_meter(surface)
+
+        elif self.state == GameState.PAUSED:
+            score_str = str(self.score)
+            shadow_surf = self.font_score.render(score_str, True, (15, 23, 42))
+            surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 124 + 2)))
+            score_surf = self.font_score.render(score_str, True, COLOR_TEXT)
+            surface.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 124)))
+            self._draw_pause_modal(surface)
 
         elif self.state == GameState.GAME_OVER:
             modal_rect = pygame.Rect(45, 170, SCREEN_WIDTH - 90, 275)
@@ -797,6 +839,74 @@ class Game:
             else:
                 pygame.draw.rect(surface, COLOR_AMMO_EMPTY, pip_rect, border_radius=3)
                 pygame.draw.rect(surface, (40, 50, 70), pip_rect, width=1, border_radius=3)
+
+    def _draw_pause_button(self, surface):
+        """Draws top-right touchable pause button icon for mobile/mouse."""
+        r = self.pause_btn_rect
+        btn_surf = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+        pygame.draw.rect(btn_surf, (15, 23, 42, 210), (0, 0, r.width, r.height), border_radius=6)
+        pygame.draw.rect(btn_surf, (56, 189, 248), (0, 0, r.width, r.height), width=1, border_radius=6)
+        surface.blit(btn_surf, (r.x, r.y))
+
+        # Two vertical bars
+        bar_color = (241, 245, 249)
+        pygame.draw.rect(surface, bar_color, (r.x + 8, r.y + 7, 3, 14), border_radius=1)
+        pygame.draw.rect(surface, bar_color, (r.x + 17, r.y + 7, 3, 14), border_radius=1)
+
+    def _draw_pause_modal(self, surface):
+        """Draws futuristic glassmorphic pause modal with audio toggles and buttons."""
+        # 1. Semi-transparent backdrop overlay
+        dim_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        dim_surf.fill((10, 15, 26, 195))
+        surface.blit(dim_surf, (0, 0))
+
+        # 2. Modal Card
+        modal_rect = pygame.Rect(45, 175, SCREEN_WIDTH - 90, 295)
+        pygame.draw.rect(surface, (20, 24, 40), modal_rect, border_radius=16)
+        pygame.draw.rect(surface, (56, 189, 248), modal_rect, width=2, border_radius=16)
+
+        # Header Title
+        title_surf = self.font_title.render("PAUSED", True, (56, 189, 248))
+        surface.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, 212)))
+
+        # Current Score subtitle
+        curr_score_surf = self.font_score_label.render(f"CURRENT SCORE: {self.score}", True, (203, 213, 225))
+        surface.blit(curr_score_surf, curr_score_surf.get_rect(center=(SCREEN_WIDTH // 2, 238)))
+
+        # 3. Resume Button
+        pygame.draw.rect(surface, (14, 116, 144), self.btn_resume, border_radius=10)
+        pygame.draw.rect(surface, (56, 189, 248), self.btn_resume, width=2, border_radius=10)
+        res_text = self.font_body.render("▶  RESUME", True, (255, 255, 255))
+        surface.blit(res_text, res_text.get_rect(center=self.btn_resume.center))
+
+        # 4. Restart Button
+        pygame.draw.rect(surface, (30, 36, 58), self.btn_restart, border_radius=10)
+        pygame.draw.rect(surface, (71, 85, 105), self.btn_restart, width=1, border_radius=10)
+        ret_text = self.font_body.render("↺  RESTART", True, (203, 213, 225))
+        surface.blit(ret_text, ret_text.get_rect(center=self.btn_restart.center))
+
+        # 5. Audio Settings Buttons (BGM & SFX)
+        # BGM Button
+        bgm_active = self.sound_mgr.bgm_enabled and not self.sound_mgr.muted
+        bgm_color = (34, 197, 94) if bgm_active else (239, 68, 68)
+        bgm_label = "BGM: ON" if bgm_active else "BGM: OFF"
+        pygame.draw.rect(surface, (30, 36, 58), self.btn_bgm, border_radius=8)
+        pygame.draw.rect(surface, bgm_color, self.btn_bgm, width=2, border_radius=8)
+        bgm_surf = self.font_badge.render(bgm_label, True, bgm_color)
+        surface.blit(bgm_surf, bgm_surf.get_rect(center=self.btn_bgm.center))
+
+        # SFX Button
+        sfx_active = self.sound_mgr.sfx_enabled and not self.sound_mgr.muted
+        sfx_color = (34, 197, 94) if sfx_active else (239, 68, 68)
+        sfx_label = "SFX: ON" if sfx_active else "SFX: OFF"
+        pygame.draw.rect(surface, (30, 36, 58), self.btn_sfx, border_radius=8)
+        pygame.draw.rect(surface, sfx_color, self.btn_sfx, width=2, border_radius=8)
+        sfx_surf = self.font_badge.render(sfx_label, True, sfx_color)
+        surface.blit(sfx_surf, sfx_surf.get_rect(center=self.btn_sfx.center))
+
+        # Helper hint at bottom
+        hint_surf = self.font_small.render("Press ESC or P to Resume", True, (148, 163, 184))
+        surface.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, 445)))
 
     def run(self):
         """Main game loop."""
