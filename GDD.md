@@ -158,12 +158,17 @@ recoil_wing/
   - [x] SoundManager modular (`src/utils/sound_manager.py`) dengan multi-channel audio dan safe fallback.
   - [x] Fitur mute cepat via tombol keyboard `M` (mute SFX & BGM sekaligus).
 
-- [x] **Phase 3 - Milestone 7: Airborne Security Drones (Dynamic Obstacle & Aerial Combo)**
+- [x] **Phase 3 - Milestone 7: Airborne Security Drones & Dual-Lane Split Paths**
   - [x] Entitas musuh Drone (`src/entities/enemy.py`) dengan animasi jet thruster ganda, chassis heksagonal gelap, antena sinyal, dan mata sensor merah dengan radar scan pulse meluas.
-  - [x] Pola patroli vertikal sinusoidal dinamis di koridor celah pipa (`PipePair`) dengan variasi probabilitas kemunculan (Peti, Drone, atau Celah Terbuka).
+  - [x] **Dual-Lane Split-Corridor System**: Khusus saat rintangan Drone muncul, pipa otomatis bercabang menjadi 2 jalur terbang (Jalur Atas vs Jalur Bawah) yang dipisahkan oleh central divider hub:
+    - **1 Jalur Aman (Safe Corridor)**: Celah bersih dan lega (150px) tanpa musuh untuk pemain yang ingin menghindar atau amunisi sedang menipis.
+    - **1 Jalur Tempur (Combat Drone Corridor)**: Celah yang dijaga oleh patroli Drone bagi pemain yang ingin menembak drone untuk meraih reward.
+    - **LED Waypoint Indicator**: Indikator lampu status di tengah divider (Merah = Jalur Berbahaya/Drone, Hijau/Teal = Jalur Aman Terbuka).
+  - [x] Pipa standar tanpa musuh (Peti / Bersih) tetap menggunakan 1 jalur tunggal dengan celah yang diperlebar (`PIPE_GAP = 185px`) agar tidak terasa sempit dan lebih adil bagi manuver player.
   - [x] Mekanik Aerial Combo ala Downwell: Menembak jatuh Drone menghadiahkan **+2 Skor** dan **Instant +1 Ammo Refund** untuk melanjutkan kombo terbang tanpa mendarat!
   - [x] Sistem debris sibernetik (`create_drone_debris`) dengan serpihan logam gelap, percikan api merah dan percikan listrik neon.
   - [x] Interaksi Energy Shield: Shield kinetik dapat menghancurkan drone seketika saat bertabrakan tanpa mematikan player.
+
 
 
 

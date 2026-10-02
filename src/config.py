@@ -31,7 +31,7 @@ BULLET_HEIGHT = 14
 PIPE_SPEED = 2.6
 PIPE_SPAWN_FRAMES = 115       # Spawn interval in frames (~1.9s at 60 FPS)
 PIPE_WIDTH = 64
-PIPE_GAP = 175                # Vertical gap between top and bottom pipe
+PIPE_GAP = 185                # Vertical gap between top and bottom pipe (widened for fair navigation)
 PIPE_MIN_HEIGHT = 70          # Minimum length for top/bottom pipes
 CRATE_SIZE = 44               # Destructible crate block dimension
 
