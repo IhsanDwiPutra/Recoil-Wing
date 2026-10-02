@@ -77,7 +77,9 @@ Game arcade sederhana menjadi luar biasa berkat **"Game Feel" (Juicing)**:
 | :--- | :--- | :--- |
 | **Shoot / Recoil Jump** | `SPACE` / `UP ARROW` / `W` | `Left Click` |
 | **Restart Game** | `R` / `SPACE` (saat Game Over) | `Left Click` |
+| **Toggle Mute Audio** | `M` | - |
 | **Pause / Resume** | `ESC` / `P` | - |
+
 
 ---
 
@@ -139,12 +141,18 @@ recoil_wing/
   - [x] Parallax background silhouette skyline kota cyberpunk yang bergulir halus.
 
 - [x] **Milestone 5: Ekstensi Fitur (Perks & Modifiers)**
-  - [x] Sistem Roguelite Upgrade Phase di skor threshold (5, 12, 20, 32).
-  - [x] Layar interaktif pemilihan kartu perk (shortcut `[1]`, `[2]`, `[3]` & mouse hover/click).
+  - [x] Sistem Roguelite In-Flight Choice Gates tanpa pause di skor threshold.
   - [x] Perk **Scatter Cannon (Shotgun)**: 3 peluru menyebar dengan daya tolak recoil ekstra.
   - [x] Perk **Energy Shield**: Barrier kinetik berputar yang menyerap 1x tabrakan maut.
   - [x] Perk **Ricochet Rounds**: Peluru memantul 2x di pipa & lantai untuk melibas peti dari berbagai sudut.
   - [x] Perk **Overclocked Cell**: Kapasitas peluru naik menjadi 6 slot + reload 35% lebih cepat.
   - [x] Perk **Hyper Piercer**: Laser ungu tembus rintangan dalam 1 garis lurus.
   - [x] HUD indikator active perk badge di pojok kiri atas.
+
+- [x] **Phase 2 - Milestone 6: Audio & Procedural Sound Effects (SFX)**
+  - [x] Generator sintesis audio prosedural tanpa ketergantungan download (`src/utils/audio_generator.py`).
+  - [x] 8 file WAV efek suara sintetis: `shoot.wav`, `shotgun.wav`, `laser.wav`, `explosion.wav`, `portal.wav`, `shield_deflect.wav`, `score.wav`, `crash.wav`.
+  - [x] SoundManager modular (`src/utils/sound_manager.py`) dengan multi-channel audio dan safe fallback.
+  - [x] Fitur mute cepat via tombol keyboard `M`.
+
 

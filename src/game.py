@@ -44,6 +44,7 @@ from src.entities.perks import (
     get_random_perk_choices,
 )
 from src.utils.camera import Camera
+from src.utils.sound_manager import SoundManager
 
 
 class GameState:
@@ -68,6 +69,8 @@ class Game:
         # Canvas surface for screen shake blitting
         self.canvas = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.camera = Camera()
+        self.sound_mgr = SoundManager()
+
 
         # Fonts
         self.font_score = pygame.font.SysFont("Trebuchet MS", 52, bold=True)
@@ -170,6 +173,12 @@ class Game:
                     self.on_jump_action()
                 elif event.key == pygame.K_r:
                     self.reset_game()
+                elif event.key == pygame.K_m:
+                    is_muted = self.sound_mgr.toggle_mute()
+                    status_text = "MUTED" if is_muted else "UNMUTED"
+                    self.floating_texts.append(
+                        FloatingText(status_text, SCREEN_WIDTH // 2, 75, (250, 204, 21), self.font_body)
+                    )
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left Click
@@ -186,13 +195,21 @@ class Game:
             self.reset_game()
 
     def fire_weapon(self):
-        """Fires weapon, spawns bullets, shell casings, muzzle smoke, and recoil shake."""
+        """Fires weapon, spawns bullets, shell casings, muzzle smoke, recoil shake, and audio."""
         new_bullets = self.player.shoot()
         if new_bullets:
             self.bullets.extend(new_bullets)
             self.particles.append(ShellCasing(self.player.x - 6, self.player.y + 4))
             self.particles.append(SmokePuff(self.player.x - 2, self.player.y + self.player.height // 2 + 6))
             self.camera.add_trauma(0.18)
+
+            # Play corresponding weapon sound
+            if self.player.weapon_type == "SHOTGUN":
+                self.sound_mgr.play("shotgun", 0.95)
+            elif self.player.weapon_type == "PIERCER":
+                self.sound_mgr.play("laser", 0.8)
+            else:
+                self.sound_mgr.play("shoot", 0.7)
 
     def apply_perk(self, choice):
         """Applies chosen perk to player stats."""
@@ -233,10 +250,12 @@ class Game:
         if self.state != GameState.GAME_OVER:
             self.state = GameState.GAME_OVER
             self.camera.add_trauma(0.70)
+            self.sound_mgr.play("crash", 0.9)
             if self.score > self.high_score:
                 self.high_score = self.score
                 self.is_new_best = True
                 self.save_high_score(self.high_score)
+
 
     def update(self):
         """Update game logic."""
@@ -287,6 +306,7 @@ class Game:
                 if chosen_perk:
                     self.apply_perk(chosen_perk)
                     self.camera.add_trauma(0.35)
+                    self.sound_mgr.play("portal", 0.85)
                     self.particles.extend(
                         create_spark_burst(self.player.x, self.player.y, count=22, color=chosen_perk["color"])
                     )
@@ -298,6 +318,7 @@ class Game:
                 if not g.passed and self.player.x > g.x + g.width:
                     g.passed = True
                     self.score += 1
+                    self.sound_mgr.play("score", 0.45)
                     self.floating_texts.append(
                         FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
                     )
@@ -311,6 +332,7 @@ class Game:
                 if not o.passed and self.player.x > o.x + o.width:
                     o.passed = True
                     self.score += 1
+                    self.sound_mgr.play("score", 0.45)
                     self.floating_texts.append(
                         FloatingText("+1", self.player.x + 20, self.player.y - 12, COLOR_TEXT, self.font_score_label)
                     )
@@ -321,6 +343,7 @@ class Game:
                     if self.player.shield_charges > 0:
                         self.player.shield_charges -= 1
                         self.camera.add_trauma(0.55)
+                        self.sound_mgr.play("shield_deflect", 0.95)
                         self.particles.extend(
                             create_spark_burst(self.player.x, self.player.y, count=18, color=(56, 189, 248))
                         )
@@ -352,6 +375,7 @@ class Game:
                                 self.particles.extend(create_crate_debris(hx, hy, count=16))
                                 self.score += 2  # Tactical demolition reward!
                                 self.camera.add_trauma(0.40)
+                                self.sound_mgr.play("explosion", 0.9)
                                 self.floating_texts.append(
                                     FloatingText("+2 CRATE!", hx, hy - 14, (250, 204, 21), self.font_body)
                                 )
@@ -360,8 +384,10 @@ class Game:
                                 self.camera.add_trauma(0.15)
                         elif hit_type == "ricochet":
                             self.particles.extend(create_spark_burst(hx, hy, count=5, color=(234, 179, 8)))
+                            self.sound_mgr.play("shoot", 0.35)
                         else:
                             self.particles.extend(create_spark_burst(hx, hy, count=6))
+
 
                         if not b.piercing:
                             break
