@@ -123,18 +123,18 @@ class SectorBanner:
         # Slide in from top, hold, then fade out
         if self.life > self.max_life - 20:
             t = (self.max_life - self.life) / 20.0
-            cur_y = int(-50 + 105 * t)
+            cur_y = int(-50 + 98 * t)
             alpha = int(240 * t)
         elif self.life < 25:
             t = self.life / 25.0
-            cur_y = 55
+            cur_y = 48
             alpha = int(240 * t)
         else:
-            cur_y = 55
+            cur_y = 48
             alpha = 240
 
         box_w = 268
-        box_h = 44
+        box_h = 38
         box_x = (SCREEN_WIDTH - box_w) // 2
 
         # Translucent glassmorphic banner backing
@@ -143,7 +143,7 @@ class SectorBanner:
         pygame.draw.rect(banner_surf, (self.accent_color[0], self.accent_color[1], self.accent_color[2], alpha), (0, 0, box_w, box_h), width=2, border_radius=8)
 
         # Tech corner markers
-        c_len = 7
+        c_len = 6
         pygame.draw.line(banner_surf, (255, 255, 255, alpha), (0, 0), (c_len, 0), width=2)
         pygame.draw.line(banner_surf, (255, 255, 255, alpha), (0, 0), (0, c_len), width=2)
         pygame.draw.line(banner_surf, (255, 255, 255, alpha), (box_w - c_len, 0), (box_w, 0), width=2)
@@ -155,8 +155,8 @@ class SectorBanner:
         sub_surf = self.font_sub.render(self.subtitle, True, self.accent_color)
         title_surf = self.font_title.render(self.name, True, (248, 250, 252))
 
-        surface.blit(sub_surf, sub_surf.get_rect(center=(SCREEN_WIDTH // 2, cur_y + 13)))
-        surface.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, cur_y + 30)))
+        surface.blit(sub_surf, sub_surf.get_rect(center=(SCREEN_WIDTH // 2, cur_y + 11)))
+        surface.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, cur_y + 26)))
 
 
 class WeatherManager:

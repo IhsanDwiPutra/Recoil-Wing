@@ -671,9 +671,9 @@ class Game:
         elif self.state == GameState.PLAYING:
             score_str = str(self.score)
             shadow_surf = self.font_score.render(score_str, True, (15, 23, 42))
-            surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 98 + 2)))
+            surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 124 + 2)))
             score_surf = self.font_score.render(score_str, True, COLOR_TEXT)
-            surface.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 98)))
+            surface.blit(score_surf, score_surf.get_rect(center=(SCREEN_WIDTH // 2, 124)))
 
             # Active Arcade Combo Badge & Gauge
             self._draw_combo_meter(surface)
@@ -725,7 +725,7 @@ class Game:
         badge_w = 130
         badge_h = 32
         badge_x = SCREEN_WIDTH // 2 - badge_w // 2
-        badge_y = 138
+        badge_y = 160
 
         # Translucent dark pill backing
         pill_surf = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
