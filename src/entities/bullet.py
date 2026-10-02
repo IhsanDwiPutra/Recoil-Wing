@@ -1,6 +1,6 @@
 """
 Bullet entity for Recoil Wing.
-Handles projectile physics, trail rendering, and lifecycle.
+Handles projectile physics, trail rendering, bouncing, and piercing.
 """
 import random
 import pygame
@@ -14,18 +14,40 @@ from src.config import (
 
 
 class Bullet:
-    def __init__(self, x, y, spread=True):
+    def __init__(
+        self,
+        x,
+        y,
+        vx=None,
+        vy=None,
+        bounces=0,
+        piercing=False,
+        core_color=COLOR_BULLET,
+        trail_color=COLOR_BULLET_TRAIL,
+    ):
         self.x = float(x)
         self.y = float(y)
         self.width = BULLET_WIDTH
         self.height = BULLET_HEIGHT
-        
-        # Downward trajectory with slight horizontal spread for game feel
-        self.vx = random.uniform(-0.8, 0.8) if spread else 0.0
-        self.vy = BULLET_SPEED + random.uniform(0.0, 1.5)
+
+        # Velocity
+        if vx is None:
+            self.vx = random.uniform(-0.8, 0.8)
+        else:
+            self.vx = float(vx)
+
+        if vy is None:
+            self.vy = BULLET_SPEED + random.uniform(0.0, 1.5)
+        else:
+            self.vy = float(vy)
+
+        self.bounces = bounces
+        self.piercing = piercing
+        self.core_color = core_color
+        self.trail_color = trail_color
 
         self.alive = True
-        self.trail = []  # Stores previous (x, y) coordinates for motion blur trail
+        self.trail = []
 
     @property
     def rect(self):
@@ -37,8 +59,24 @@ class Bullet:
             self.height,
         )
 
+    def bounce_vertical(self):
+        """Reverses vertical velocity if bounces remain."""
+        if self.bounces > 0:
+            self.vy = -self.vy * 0.85
+            self.bounces -= 1
+            return True
+        return False
+
+    def bounce_horizontal(self):
+        """Reverses horizontal velocity if bounces remain."""
+        if self.bounces > 0:
+            self.vx = -self.vx * 0.85
+            self.bounces -= 1
+            return True
+        return False
+
     def update(self, max_y):
-        """Update bullet position and trail."""
+        """Update bullet position, trail, and bounds."""
         if not self.alive:
             return
 
@@ -51,8 +89,17 @@ class Bullet:
         self.x += self.vx
         self.y += self.vy
 
-        # Check bounds (ground or screen bottom)
+        # Check floor collision
         if self.y >= max_y:
+            if self.bounces > 0:
+                self.y = max_y - 2
+                self.vy = -abs(self.vy) * 0.85
+                self.bounces -= 1
+            else:
+                self.alive = False
+
+        # Check screen edge bounds
+        if self.x < -20 or self.x > 500 or self.y < -50:
             self.alive = False
 
     def draw(self, surface):
@@ -60,16 +107,16 @@ class Bullet:
         if not self.alive:
             return
 
-        # 1. Draw motion trail (gradient fade)
+        # 1. Motion trail
         for i, (tx, ty) in enumerate(self.trail):
             ratio = (i + 1) / len(self.trail)
-            trail_radius = max(1, int(self.width * 0.4 * ratio))
-            trail_color = (
-                int(COLOR_BULLET_TRAIL[0] * ratio),
-                int(COLOR_BULLET_TRAIL[1] * ratio),
-                int(COLOR_BULLET_TRAIL[2] * ratio),
+            trail_radius = max(1, int(self.width * 0.45 * ratio))
+            tc = (
+                int(self.trail_color[0] * ratio),
+                int(self.trail_color[1] * ratio),
+                int(self.trail_color[2] * ratio),
             )
-            pygame.draw.circle(surface, trail_color, (int(tx), int(ty)), trail_radius)
+            pygame.draw.circle(surface, tc, (int(tx), int(ty)), trail_radius)
 
         # 2. Outer Glow / Body
         body_rect = pygame.Rect(
@@ -78,13 +125,13 @@ class Bullet:
             self.width,
             self.height,
         )
-        pygame.draw.rect(surface, COLOR_BULLET_TRAIL, body_rect, border_radius=3)
+        pygame.draw.rect(surface, self.trail_color, body_rect, border_radius=3)
 
-        # 3. Inner Bright Core
+        # 3. Inner Core
         core_rect = pygame.Rect(
             int(self.x - (self.width - 2) // 2),
             int(self.y - (self.height - 2) // 2),
             max(2, self.width - 2),
             max(2, self.height - 4),
         )
-        pygame.draw.rect(surface, COLOR_BULLET, core_rect, border_radius=2)
+        pygame.draw.rect(surface, self.core_color, core_rect, border_radius=2)

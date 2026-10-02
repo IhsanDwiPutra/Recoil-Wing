@@ -134,5 +134,13 @@ recoil_wing/
   - [x] Efek popup teks skor melayang (`+1`, `+2 CRATE!`).
   - [x] Parallax background silhouette skyline kota cyberpunk yang bergulir halus.
 
-- [ ] **Milestone 5: Ekstensi Fitur (Perks & Modifiers)**
-  - [ ] Eksperimen power-up / upgrade berkala (Shotgun recoil, bouncing bullet, dll.).
+- [x] **Milestone 5: Ekstensi Fitur (Perks & Modifiers)**
+  - [x] Sistem Roguelite Upgrade Phase di skor threshold (5, 12, 20, 32).
+  - [x] Layar interaktif pemilihan kartu perk (shortcut `[1]`, `[2]`, `[3]` & mouse hover/click).
+  - [x] Perk **Scatter Cannon (Shotgun)**: 3 peluru menyebar dengan daya tolak recoil ekstra.
+  - [x] Perk **Energy Shield**: Barrier kinetik berputar yang menyerap 1x tabrakan maut.
+  - [x] Perk **Ricochet Rounds**: Peluru memantul 2x di pipa & lantai untuk melibas peti dari berbagai sudut.
+  - [x] Perk **Overclocked Cell**: Kapasitas peluru naik menjadi 6 slot + reload 35% lebih cepat.
+  - [x] Perk **Hyper Piercer**: Laser ungu tembus rintangan dalam 1 garis lurus.
+  - [x] HUD indikator active perk badge di pojok kiri atas.
+

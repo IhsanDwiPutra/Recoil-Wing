@@ -122,22 +122,36 @@ class PipePair:
     def check_bullet_hit(self, bullet):
         """
         Check if a bullet hits the crate or pipes.
+        Supports piercing laser beams and ricochet bounces.
         Returns a tuple: (hit_type, hit_x, hit_y, destroyed) or None.
         """
         # 1. Crate collision
         if self.crate and self.crate.alive and self.crate.rect.colliderect(bullet.rect):
             destroyed = self.crate.take_damage()
+            if not bullet.piercing:
+                bullet.alive = False
             return ("crate", self.crate.rect.centerx, self.crate.rect.centery, destroyed)
 
-        # 2. Bottom Pipe top surface
+        # 2. Bottom Pipe collision
         if self.bottom_rect.colliderect(bullet.rect):
-            return ("pipe", bullet.x, self.bottom_rect.top, False)
+            if bullet.bounces > 0:
+                bullet.bounce_vertical()
+                return ("ricochet", bullet.x, self.bottom_rect.top, False)
+            else:
+                bullet.alive = False
+                return ("pipe", bullet.x, self.bottom_rect.top, False)
 
-        # 3. Top Pipe
+        # 3. Top Pipe collision
         if self.top_rect.colliderect(bullet.rect):
-            return ("pipe", bullet.x, self.top_rect.bottom, False)
+            if bullet.bounces > 0:
+                bullet.bounce_vertical()
+                return ("ricochet", bullet.x, self.top_rect.bottom, False)
+            else:
+                bullet.alive = False
+                return ("pipe", bullet.x, self.top_rect.bottom, False)
 
         return None
+
 
     def draw(self, surface):
         """Draw top and bottom pipes with shaded industrial styling."""
