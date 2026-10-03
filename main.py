@@ -1,8 +1,14 @@
+# /// script
+# dependencies = [
+#     "pygame-ce",
+# ]
+# ///
 """
 Main entry point for Recoil Wing.
 Supports both native desktop and Pygbag (Android / Web / PWA).
 """
 import asyncio
+import pygame
 from src.game import Game
 
 
@@ -11,4 +17,5 @@ async def main():
     await game.run()
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
