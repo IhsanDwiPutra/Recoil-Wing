@@ -1,0 +1,36 @@
+# 🦅 RECOIL WING — Cyber-Bird Action Simulator
+
+**Recoil Wing** is an adrenaline-fueled 60 FPS retro-arcade roguelite shooter! Navigate perilous neon skyscraper sectors, obliterate rogue security drones with heavy downward recoil cannon fire, and blast through holographic in-flight choice gates to customize your tactical build in mid-air.
+
+---
+
+### ⚡ GAMEPLAY FEATURES:
+- 🚀 **Downward Recoil Propulsion:** Your primary weapon is your jet thruster! Blast downwards to propel yourself upward through narrow energy conduits.
+- 🎯 **Airborne Security Drones & Dual-Lane Corridors:** Choose your route wisely—risk the combat drone lane for high scores and ammo refunds, or take the calm corridor.
+- 🔥 **Arcade Combo Streak System:** String consecutive drone eliminations to trigger multipliers from `x2 COMBO` up to `x5+ HYPER STREAK` with luminous afterimage motion trails!
+- ⚡ **Real-Time Choice Gates (No Pauses!):** Fly directly through glowing portal gates to pick tactical perks:
+  - 💥 *Heavy Shotgun* (Triple pellet spread)
+  - ⚡ *High-Velocity Piercer* (Porous beam that penetrates solid crates)
+  - 🛡️ *Kinetic Energy Shield* (Absorbs fatal impacts)
+  - 🎾 *Ricochet Bullets* (Bounces off steel pipes)
+  - 🔋 *Expanded Magazine* (6-round capacity with fast reload)
+- 🌧️ **Dynamic Biome & Weather Shifts:** Transition seamlessly between:
+  - *Sector 1:* Neon Downtown (Midnight indigo & cyber cyan)
+  - *Sector 2:* Acid Rain District (Atmospheric downpours, water splashes & thunderclaps)
+  - *Sector 3:* Solar Overdrive (Crimson skies & floating solar embers)
+- ⏸️ **Mobile & Desktop Pause Menu:** In-game pause menu with independent BGM & SFX audio toggles and full touch-screen support.
+- 🏆 **Local Persistent High Score:** Compete against your personal best record saved automatically.
+
+---
+
+### 🎮 CONTROLS:
+- **Blast / Jump:** `SPACEBAR`, `W`, `UP ARROW`, or `LEFT CLICK / TOUCH SCREEN TAP`
+- **Pause Game:** `ESC`, `P`, or tap the on-screen `❚❚` Pause Button (Top-Right)
+- **Restart:** `R` or via Pause Menu
+- **Audio Mute Toggle:** `M`
+
+---
+
+### 📱 PLATFORM SUPPORT:
+Play directly inside your web browser on **PC, Mac, Linux, Chromebook, Android, and iOS**!
+Fully responsive and mobile-friendly with one-touch controls.
