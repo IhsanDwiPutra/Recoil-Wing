@@ -3,6 +3,7 @@ Recoil Wing - Client Network Controller.
 Thread-safe, non-blocking WebSocket client that connects the Pygame client
 to the Multiplayer Relay Server. Supports both Desktop and Web (WASM).
 """
+import os
 import sys
 import json
 import queue
@@ -13,9 +14,30 @@ import asyncio
 IS_WASM = sys.platform == "emscripten" or hasattr(sys, "_emscripten_info")
 
 
+def get_default_server_url():
+    """Detects server URL from environment variable, server_config.json, or fallback."""
+    # 1. Environment variable
+    env_url = os.environ.get("RECOIL_SERVER_URL")
+    if env_url:
+        return env_url
+
+    # 2. Local config file (server_config.json in project root)
+    try:
+        cfg_path = os.path.join(os.path.dirname(__file__), "..", "..", "server_config.json")
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r") as f:
+                cfg = json.load(f)
+                if "server_url" in cfg and cfg["server_url"]:
+                    return cfg["server_url"]
+    except Exception:
+        pass
+
+    return "ws://127.0.0.1:8765"
+
+
 class NetworkClient:
-    def __init__(self, server_url="ws://127.0.0.1:8765"):
-        self.server_url = server_url
+    def __init__(self, server_url=None):
+        self.server_url = server_url or get_default_server_url()
         self.connected = False
         self.role = None          # 'host' or 'guest'
         self.room_code = None
@@ -35,15 +57,61 @@ class NetworkClient:
         self._running = False
 
     def start(self, server_url=None):
-        """Starts background network worker."""
+        """Starts background network worker (Thread on Desktop, JS WebSocket on WASM/Web)."""
         if server_url:
             self.server_url = server_url
         if self._running:
             return
 
         self._running = True
-        self._thread = threading.Thread(target=self._worker_thread, daemon=True)
-        self._thread.start()
+        if IS_WASM:
+            self._start_wasm_websocket()
+        else:
+            self._thread = threading.Thread(target=self._worker_thread, daemon=True)
+            self._thread.start()
+
+    def _start_wasm_websocket(self):
+        """Initializes browser native WebSocket via Emscripten platform bridge."""
+        try:
+            from platform import window
+            url = self.server_url
+            try:
+                # Allow query parameter override e.g. ?server=wss://...
+                params = window.URLSearchParams.new(window.location.search)
+                if params.has("server"):
+                    url = params.get("server")
+            except Exception:
+                pass
+
+            logging.info(f"[WASM NetworkClient] Connecting to {url}...")
+            self._ws = window.WebSocket.new(url)
+
+            def on_open(event):
+                self.connected = True
+                self.inbox.put({"type": "connected", "url": url})
+                logging.info("[WASM NetworkClient] Connected successfully!")
+
+            def on_message(event):
+                try:
+                    data = json.loads(str(event.data))
+                    self._handle_incoming_message(data)
+                except Exception as e:
+                    logging.error(f"[WASM NetworkClient] JSON parse error: {e}")
+
+            def on_error(event):
+                self.connected = False
+                self.inbox.put({"type": "connection_error", "error": "WebSocket error occurred"})
+
+            def on_close(event):
+                self.connected = False
+                self.inbox.put({"type": "connection_error", "error": "Connection closed"})
+
+            self._ws.onopen = on_open
+            self._ws.onmessage = on_message
+            self._ws.onerror = on_error
+            self._ws.onclose = on_close
+        except Exception as e:
+            logging.error(f"[WASM NetworkClient] Failed to setup WebSocket: {e}")
 
     def stop(self):
         """Stops network client and closes connection."""
@@ -183,8 +251,19 @@ class NetworkClient:
     def poll_events(self):
         """
         Pulls all received events from the inbox.
+        In WASM mode, also dispatches outbox queue to JS WebSocket.
         Returns a list of event dicts to be handled by Pygame.
         """
+        # On WASM, flush outbox messages into native WebSocket
+        if IS_WASM and self._ws and self.connected:
+            while not self.outbox.empty():
+                try:
+                    msg = self.outbox.get_nowait()
+                    if msg.get("type") != "_stop":
+                        self._ws.send(json.dumps(msg))
+                except Exception:
+                    break
+
         events = []
         while not self.inbox.empty():
             try:

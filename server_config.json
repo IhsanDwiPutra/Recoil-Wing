@@ -1,0 +1,4 @@
+{
+  "server_url": "ws://127.0.0.1:8765",
+  "_comment": "Ganti 'ws://127.0.0.1:8765' ke 'ws://192.168.100.22:8765' jika ingin dimainkan dari perangkat lain di Wi-Fi yang sama, atau 'wss://...' jika relay server di-deploy online."
+}
