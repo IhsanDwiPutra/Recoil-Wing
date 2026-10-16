@@ -76,10 +76,16 @@ class NetworkClient:
             from platform import window
             url = self.server_url
             try:
-                # Allow query parameter override e.g. ?server=wss://...
+                # 1. Allow query parameter override e.g. ?server=wss://...
                 params = window.URLSearchParams.new(window.location.search)
                 if params.has("server"):
                     url = params.get("server")
+                elif "127.0.0.1" in url or "localhost" in url:
+                    # 2. Auto-detect host IP when accessed across Wi-Fi e.g. http://192.168.100.22:8000
+                    hostname = str(window.location.hostname)
+                    if hostname and hostname != "localhost" and hostname != "127.0.0.1":
+                        proto = "wss://" if str(window.location.protocol) == "https:" else "ws://"
+                        url = f"{proto}{hostname}:8765"
             except Exception:
                 pass
 
