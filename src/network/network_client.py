@@ -35,6 +35,23 @@ def get_default_server_url():
     return "ws://127.0.0.1:8765"
 
 
+def run_js(code):
+    """Executes JavaScript in Pygbag WASM using embed.run_script or platform.window.eval."""
+    try:
+        import embed
+        if hasattr(embed, "run_script"):
+            return embed.run_script(code)
+    except Exception:
+        pass
+    try:
+        import platform
+        if hasattr(platform, "window") and hasattr(platform.window, "eval"):
+            return platform.window.eval(code)
+    except Exception:
+        pass
+    return None
+
+
 class NetworkClient:
     def __init__(self, server_url=None):
         self.server_url = server_url or get_default_server_url()
@@ -73,19 +90,20 @@ class NetworkClient:
     def _start_wasm_websocket(self):
         """Initializes browser native WebSocket via native JS bridge to avoid WASM callback deadlocks."""
         try:
-            import platform
             url = self.server_url
             try:
-                # 1. Allow query parameter override e.g. ?server=wss://...
-                params = platform.window.URLSearchParams.new(platform.window.location.search)
-                if params.has("server"):
-                    url = params.get("server")
-                elif "127.0.0.1" in url or "localhost" in url:
-                    # 2. Auto-detect host IP when accessed across Wi-Fi e.g. http://192.168.100.22:8000
-                    hostname = str(platform.window.location.hostname)
-                    if hostname and hostname != "localhost" and hostname != "127.0.0.1":
-                        proto = "wss://" if str(platform.window.location.protocol) == "https:" else "ws://"
-                        url = f"{proto}{hostname}:8765"
+                import platform
+                if hasattr(platform, "window"):
+                    # 1. Allow query parameter override e.g. ?server=wss://...
+                    params = platform.window.URLSearchParams.new(platform.window.location.search)
+                    if params.has("server"):
+                        url = params.get("server")
+                    elif "127.0.0.1" in url or "localhost" in url:
+                        # 2. Auto-detect host IP when accessed across Wi-Fi e.g. http://192.168.100.22:8000
+                        hostname = str(platform.window.location.hostname)
+                        if hostname and hostname != "localhost" and hostname != "127.0.0.1":
+                            proto = "wss://" if str(platform.window.location.protocol) == "https:" else "ws://"
+                            url = f"{proto}{hostname}:8765"
             except Exception as e:
                 logging.warning(f"[WASM] URL detection warning: {e}")
 
@@ -136,7 +154,7 @@ class NetworkClient:
                         }
                     },
                     poll: function() {
-                        if (this.inbox.length === 0) return '[]';
+                        if (!this.inbox || this.inbox.length === 0) return '[]';
                         var msgs = this.inbox.slice();
                         this.inbox = [];
                         return JSON.stringify(msgs);
@@ -144,9 +162,9 @@ class NetworkClient:
                 };
             }
             """
-            platform.window.eval(js_init)
+            run_js(js_init)
             logging.info(f"[WASM NetworkClient] Invoking JS connect to {url}...")
-            platform.window.eval(f"window.recoil_ws.connect('{url}')")
+            run_js(f"window.recoil_ws.connect('{url}')")
         except Exception as e:
             logging.error(f"[WASM NetworkClient] Failed to setup WebSocket bridge: {e}")
 
@@ -156,8 +174,7 @@ class NetworkClient:
         self.connected = False
         if IS_WASM:
             try:
-                import platform
-                platform.window.eval("if (window.recoil_ws && window.recoil_ws.socket) window.recoil_ws.socket.close();")
+                run_js("if (window.recoil_ws && window.recoil_ws.socket) window.recoil_ws.socket.close();")
             except Exception:
                 pass
         else:
@@ -300,9 +317,8 @@ class NetworkClient:
         """
         if IS_WASM:
             try:
-                import platform
                 # Sync connected status
-                self.connected = bool(platform.window.eval("window.recoil_ws ? window.recoil_ws.connected : false"))
+                self.connected = bool(run_js("window.recoil_ws ? window.recoil_ws.connected : false"))
 
                 # Flush outbox into JS WebSocket
                 while not self.outbox.empty():
@@ -310,12 +326,12 @@ class NetworkClient:
                     if msg.get("type") != "_stop":
                         json_str = json.dumps(msg)
                         escaped = json.dumps(json_str)
-                        platform.window.eval(f"window.recoil_ws.send({escaped})")
+                        run_js(f"if (window.recoil_ws) window.recoil_ws.send({escaped});")
 
                 # Poll messages from JS inbox
-                raw_json = str(platform.window.eval("window.recoil_ws ? window.recoil_ws.poll() : '[]'"))
+                raw_json = run_js("window.recoil_ws ? window.recoil_ws.poll() : '[]'")
                 if raw_json and raw_json != "[]":
-                    msg_list = json.loads(raw_json)
+                    msg_list = json.loads(str(raw_json))
                     for item in msg_list:
                         if isinstance(item, str):
                             data = json.loads(item)

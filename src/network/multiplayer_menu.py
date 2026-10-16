@@ -157,12 +157,16 @@ class MultiplayerMenu:
 
     def _action_create_room(self):
         """Sends room creation request to server."""
-        if not self.net.connected:
-            self.net.start()
-        self.sub_state = LobbySubState.HOST_WAITING
-        self.status_message = "Generating Room..."
-        self.status_color = COLOR_CYAN_NEON
-        self.net.create_room()
+        try:
+            if not self.net.connected:
+                self.net.start()
+            self.sub_state = LobbySubState.HOST_WAITING
+            self.status_message = "Generating Room..."
+            self.status_color = COLOR_CYAN_NEON
+            self.net.create_room()
+        except Exception as e:
+            self.status_message = f"Error: {e}"
+            self.status_color = COLOR_PINK_NEON
 
     def _submit_join_code(self):
         """Submits typed room code to join rival room."""
@@ -171,11 +175,15 @@ class MultiplayerMenu:
             self.status_message = "Room code must be 4 letters!"
             self.status_color = COLOR_PINK_NEON
             return
-        if not self.net.connected:
-            self.net.start()
-        self.status_message = f"Connecting to Room {code}..."
-        self.status_color = COLOR_GOLD_NEON
-        self.net.join_room(code)
+        try:
+            if not self.net.connected:
+                self.net.start()
+            self.status_message = f"Connecting to Room {code}..."
+            self.status_color = COLOR_GOLD_NEON
+            self.net.join_room(code)
+        except Exception as e:
+            self.status_message = f"Error: {e}"
+            self.status_color = COLOR_PINK_NEON
 
     def update(self, dt):
         """Updates network event queue, polling, and countdowns."""
