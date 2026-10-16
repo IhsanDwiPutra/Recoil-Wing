@@ -48,10 +48,14 @@ from src.entities.perks import (
 from src.utils.camera import Camera
 from src.utils.sound_manager import SoundManager
 from src.entities.weather import WeatherManager
+from src.entities.rival_ghost import RivalGhost
+from src.network.network_client import NetworkClient
+from src.network.multiplayer_menu import MultiplayerMenu
 
 
 class GameState:
     READY = "ready"
+    MULTIPLAYER_MENU = "multiplayer_menu"
     PLAYING = "playing"
     PAUSED = "paused"
     GAME_OVER = "game_over"
@@ -119,6 +123,28 @@ class Game:
         half_btn_w = (SCREEN_WIDTH - 150) // 2
         self.btn_bgm = pygame.Rect(70, 368, half_btn_w, 40)
         self.btn_sfx = pygame.Rect(70 + half_btn_w + 10, 368, half_btn_w, 40)
+
+        # Title Screen Mode Select Buttons
+        btn_mode_w = 260
+        btn_mode_h = 44
+        btn_mode_x = (SCREEN_WIDTH - btn_mode_w) // 2
+        self.btn_mode_solo = pygame.Rect(btn_mode_x, 285, btn_mode_w, btn_mode_h)
+        self.btn_mode_multi = pygame.Rect(btn_mode_x, 345, btn_mode_w, btn_mode_h)
+
+        # Multiplayer & Online Duel State
+        self.is_multiplayer = False
+        self.net = NetworkClient()
+        self.mp_menu = MultiplayerMenu(
+            self.net,
+            self.sound_mgr,
+            self.font_title,
+            self.font_body,
+            self.font_small,
+            self.font_score,
+        )
+        self.rival_ghost = RivalGhost(self.font_badge)
+        self.mp_frame_counter = 0
+        self.duel_result = None  # None, "VICTORY", "DEFEAT", "TIED", "IN_PROGRESS"
 
         # Entities & States
         self.player = Player()
@@ -195,18 +221,34 @@ class Game:
         """Process input events."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self.net.stop()
                 pygame.quit()
                 sys.exit()
+
+            # Delegate events directly if in Multiplayer Menu
+            if self.state == GameState.MULTIPLAYER_MENU:
+                action = self.mp_menu.handle_event(event)
+                if action == "back_to_menu":
+                    self.sound_mgr.play("shoot", 0.5)
+                    self.net.stop()
+                    self.state = GameState.READY
+                continue
 
             elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_p):
                     if self.state == GameState.PLAYING:
-                        self.state = GameState.PAUSED
+                        if not self.is_multiplayer:
+                            self.state = GameState.PAUSED
                     elif self.state == GameState.PAUSED:
                         self.state = GameState.PLAYING
                 elif event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
                     if self.state == GameState.PAUSED:
                         self.state = GameState.PLAYING
+                    elif self.state == GameState.READY:
+                        self.is_multiplayer = False
+                        self.on_jump_action()
+                    elif self.state == GameState.GAME_OVER:
+                        self.reset_game()
                     else:
                         self.on_jump_action()
                 elif event.key == pygame.K_r:
@@ -220,7 +262,20 @@ class Game:
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left Click or Mobile Touch
-                    if self.state == GameState.PAUSED:
+                    if self.state == GameState.READY:
+                        if self.btn_mode_solo.collidepoint(event.pos):
+                            self.is_multiplayer = False
+                            self.sound_mgr.play("shoot", 0.6)
+                            self.on_jump_action()
+                        elif self.btn_mode_multi.collidepoint(event.pos):
+                            self.sound_mgr.play("portal", 0.8)
+                            self.mp_menu.reset()
+                            self.net.start()
+                            self.state = GameState.MULTIPLAYER_MENU
+                        else:
+                            self.is_multiplayer = False
+                            self.on_jump_action()
+                    elif self.state == GameState.PAUSED:
                         if self.btn_resume.collidepoint(event.pos):
                             self.state = GameState.PLAYING
                         elif self.btn_restart.collidepoint(event.pos):
@@ -230,12 +285,12 @@ class Game:
                         elif self.btn_sfx.collidepoint(event.pos):
                             self.sound_mgr.toggle_sfx()
                     elif self.state == GameState.PLAYING:
-                        if self.pause_btn_rect.collidepoint(event.pos):
+                        if not self.is_multiplayer and self.pause_btn_rect.collidepoint(event.pos):
                             self.state = GameState.PAUSED
                         else:
                             self.on_jump_action()
-                    else:
-                        self.on_jump_action()
+                    elif self.state == GameState.GAME_OVER:
+                        self.reset_game()
 
     def on_jump_action(self):
         """Handle jump/recoil action across different states."""
@@ -282,8 +337,8 @@ class Game:
             self.player.ammo = 6
             self.player.reload_frames = int(AMMO_RELOAD_FRAMES * 0.65)
 
-    def reset_game(self):
-        """Reset game to initial ready state."""
+    def reset_game(self, preserve_multiplayer=False):
+        """Reset game to initial ready state or fresh multiplayer duel."""
         self.player.reset()
         self.bullets.clear()
         self.obstacles.clear()
@@ -293,7 +348,6 @@ class Game:
         self.active_perks.clear()
         self.claimed_milestones.clear()
         self.pipe_spawn_timer = 0
-        self.state = GameState.READY
         self.score = 0
         self.combo_count = 0
         self.combo_timer = 0
@@ -302,6 +356,11 @@ class Game:
         self.ready_timer = 0.0
         self.weather.reset()
         self.sound_mgr.restore_bgm()
+        if not preserve_multiplayer:
+            self.is_multiplayer = False
+            self.duel_result = None
+            self.rival_ghost.reset()
+            self.state = GameState.READY
 
     def trigger_game_over(self):
         """Transitions into Game Over and checks high score record."""
@@ -314,6 +373,21 @@ class Game:
                 self.high_score = self.score
                 self.is_new_best = True
                 self.save_high_score(self.high_score)
+
+            if self.is_multiplayer:
+                self.net.send_crash(self.score)
+                if not self.rival_ghost.is_alive:
+                    if self.score > self.rival_ghost.score:
+                        self.duel_result = "VICTORY"
+                    elif self.score < self.rival_ghost.score:
+                        self.duel_result = "DEFEAT"
+                    else:
+                        self.duel_result = "TIED"
+                else:
+                    if self.rival_ghost.score > self.score:
+                        self.duel_result = "DEFEAT"
+                    else:
+                        self.duel_result = "IN_PROGRESS"
 
 
 
@@ -338,12 +412,61 @@ class Game:
             first['x'] = last_x + random.randint(4, 14)
             self.buildings.append(first)
 
+        if self.state == GameState.MULTIPLAYER_MENU:
+            action = self.mp_menu.update(1.0 / FPS)
+            if action == "start_match":
+                shared_seed = self.net.shared_seed
+                if shared_seed is not None:
+                    random.seed(shared_seed)
+                self.is_multiplayer = True
+                self.reset_game(preserve_multiplayer=True)
+                self.rival_ghost.reset()
+                self.duel_result = None
+                self.state = GameState.PLAYING
+                self.sound_mgr.play("portal", 0.9)
+                self.floating_texts.append(
+                    FloatingText("RIVAL RACE START!", SCREEN_WIDTH // 2, 120, (0, 240, 255), self.font_title)
+                )
+            return
+
         if self.state == GameState.READY:
             self.ready_timer += 0.05
             self.player.y = self.player.start_y + math.sin(self.ready_timer) * 8
             self.player.rotation = 0.0
 
         elif self.state == GameState.PLAYING:
+            if self.is_multiplayer:
+                for net_evt in self.net.poll_events():
+                    evt_type = net_evt.get("type")
+                    if evt_type == "state":
+                        self.rival_ghost.update_from_network(net_evt)
+                    elif evt_type == "crash":
+                        self.rival_ghost.is_alive = False
+                        rival_score = net_evt.get("score", self.rival_ghost.score)
+                        self.rival_ghost.score = rival_score
+                        self.sound_mgr.play("explosion", 0.8)
+                        self.floating_texts.append(
+                            FloatingText(f"RIVAL CRASHED ({rival_score})!", SCREEN_WIDTH // 2, 95, (244, 63, 94), self.font_body)
+                        )
+                    elif evt_type == "opponent_disconnected":
+                        self.floating_texts.append(
+                            FloatingText("RIVAL DISCONNECTED", SCREEN_WIDTH // 2, 95, (234, 179, 8), self.font_body)
+                        )
+
+                # Send local player state at ~20 Hz (every 3 frames)
+                self.mp_frame_counter += 1
+                if self.mp_frame_counter % 3 == 0:
+                    self.net.send_state(
+                        x=self.player.x,
+                        y=self.player.y,
+                        vy=self.player.vy,
+                        score=self.score,
+                        alive=self.player.is_alive,
+                        shooting=(self.player.muzzle_flash_timer > 0)
+                    )
+
+                self.rival_ghost.update(1.0 / FPS)
+
             self.player.update(combo_count=self.combo_count)
 
             # Combo Timer Decay & Streak End Check
@@ -577,6 +700,31 @@ class Game:
                     self.trigger_game_over()
 
         elif self.state == GameState.GAME_OVER:
+            if self.is_multiplayer:
+                for net_evt in self.net.poll_events():
+                    evt_type = net_evt.get("type")
+                    if evt_type == "state":
+                        self.rival_ghost.update_from_network(net_evt)
+                    elif evt_type == "crash":
+                        self.rival_ghost.is_alive = False
+                        self.rival_ghost.score = net_evt.get("score", self.rival_ghost.score)
+                        self.sound_mgr.play("explosion", 0.7)
+
+                self.rival_ghost.update(1.0 / FPS)
+
+                if not self.rival_ghost.is_alive:
+                    if self.score > self.rival_ghost.score:
+                        self.duel_result = "VICTORY"
+                    elif self.score < self.rival_ghost.score:
+                        self.duel_result = "DEFEAT"
+                    else:
+                        self.duel_result = "TIED"
+                else:
+                    if self.rival_ghost.score > self.score:
+                        self.duel_result = "DEFEAT"
+                    else:
+                        self.duel_result = "IN_PROGRESS"
+
             for b in self.bullets:
                 b.update(self.ground_y)
             self.bullets = [b for b in self.bullets if b.alive]
@@ -623,6 +771,18 @@ class Game:
         # 2.5. Ambient Background Weather (Lightning Flash & Floating Embers)
         self.weather.draw_background_fx(self.canvas)
 
+        # SPECIAL: If in Multiplayer Menu, draw Menu Overlay over Cityscape & Ground
+        if self.state == GameState.MULTIPLAYER_MENU:
+            ground_rect = pygame.Rect(0, self.ground_y, SCREEN_WIDTH, self.ground_height)
+            pygame.draw.rect(self.canvas, COLOR_GROUND, ground_rect)
+            pygame.draw.line(self.canvas, COLOR_GROUND_LINE, (0, self.ground_y), (SCREEN_WIDTH, self.ground_y), width=3)
+            self.mp_menu.draw(self.canvas)
+            dx, dy = self.camera.get_offset()
+            self.screen.fill((10, 11, 20))
+            self.screen.blit(self.canvas, (dx, dy))
+            pygame.display.flip()
+            return
+
         # 3. Choice Gates (In-Flight Portals)
         for g in self.gates:
             g.draw(self.canvas, self.font_badge)
@@ -638,6 +798,10 @@ class Game:
         # 6. Particles & Casings
         for p in self.particles:
             p.draw(self.canvas)
+
+        # 6.5. Rival Ghost Hologram (Online 2P Race)
+        if self.is_multiplayer:
+            self.rival_ghost.draw(self.canvas)
 
         # 7. Player
         self.player.draw(self.canvas)
@@ -686,24 +850,40 @@ class Game:
 
         if self.state == GameState.READY:
             title_surf = self.font_title.render("RECOIL WING", True, COLOR_TEXT)
-            title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 175))
+            title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, 148))
             surface.blit(title_surf, title_rect)
 
-            sub_surf = self.font_body.render("Press SPACE or CLICK to Blast & Fly", True, COLOR_ACCENT)
-            sub_rect = sub_surf.get_rect(center=(SCREEN_WIDTH // 2, 225))
+            sub_surf = self.font_body.render("CYBER ARCADE ACTION", True, COLOR_ACCENT)
+            sub_rect = sub_surf.get_rect(center=(SCREEN_WIDTH // 2, 190))
             surface.blit(sub_surf, sub_rect)
 
             if self.high_score > 0:
-                best_surf = self.font_badge.render(f"BEST RECORD: {self.high_score}", True, (250, 204, 21))
-                best_rect = best_surf.get_rect(center=(SCREEN_WIDTH // 2, 265))
+                best_surf = self.font_badge.render(f"★ BEST RECORD: {self.high_score} ★", True, (250, 204, 21))
+                best_rect = best_surf.get_rect(center=(SCREEN_WIDTH // 2, 228))
                 surface.blit(best_surf, best_rect)
 
-            hint_surf = self.font_small.render("Fly through neon Perk Gates in mid-flight to upgrade!", True, COLOR_TEXT_MUTED)
+            # 1P Solo Campaign Button
+            pygame.draw.rect(surface, (20, 24, 40), self.btn_mode_solo, border_radius=10)
+            pygame.draw.rect(surface, (56, 189, 248), self.btn_mode_solo, width=2, border_radius=10)
+            solo_txt = self.font_body.render("1P SOLO CAMPAIGN", True, (255, 255, 255))
+            surface.blit(solo_txt, solo_txt.get_rect(center=self.btn_mode_solo.center))
+
+            # 2P Rival Race Button
+            pygame.draw.rect(surface, (20, 24, 40), self.btn_mode_multi, border_radius=10)
+            pygame.draw.rect(surface, (255, 42, 133), self.btn_mode_multi, width=2, border_radius=10)
+            multi_txt = self.font_body.render("2P RIVAL RACE (ONLINE)", True, (255, 114, 182))
+            surface.blit(multi_txt, multi_txt.get_rect(center=self.btn_mode_multi.center))
+
+            hint_surf = self.font_small.render("Select mode or press SPACE for Quick Solo", True, COLOR_TEXT_MUTED)
             hint_rect = hint_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 30))
             surface.blit(hint_surf, hint_rect)
 
         elif self.state == GameState.PLAYING:
-            self._draw_pause_button(surface)
+            if not self.is_multiplayer:
+                self._draw_pause_button(surface)
+            else:
+                self._draw_multiplayer_duel_bar(surface)
+
             score_str = str(self.score)
             shadow_surf = self.font_score.render(score_str, True, (15, 23, 42))
             surface.blit(shadow_surf, shadow_surf.get_rect(center=(SCREEN_WIDTH // 2 + 2, 124 + 2)))
@@ -722,29 +902,122 @@ class Game:
             self._draw_pause_modal(surface)
 
         elif self.state == GameState.GAME_OVER:
-            modal_rect = pygame.Rect(45, 170, SCREEN_WIDTH - 90, 275)
-            pygame.draw.rect(surface, (24, 27, 44), modal_rect, border_radius=12)
-            pygame.draw.rect(surface, (55, 62, 92), modal_rect, width=2, border_radius=12)
-
-            go_surf = self.font_title.render("GAME OVER", True, COLOR_ACCENT)
-            surface.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 210)))
-
-            score_txt = self.font_body.render(f"FINAL SCORE: {self.score}", True, COLOR_TEXT)
-            surface.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 255)))
-
-            # Best Combo Streak
-            streak_color = (250, 204, 21) if self.combo_max >= 3 else (45, 212, 191) if self.combo_max >= 2 else COLOR_TEXT_MUTED
-            streak_txt = self.font_badge.render(f"MAX STREAK: {self.combo_max}x COMBO", True, streak_color)
-            surface.blit(streak_txt, streak_txt.get_rect(center=(SCREEN_WIDTH // 2, 288)))
-
-            if self.is_new_best and self.score > 0:
-                best_txt = self.font_badge.render("★ NEW BEST RECORD! ★", True, (250, 204, 21))
+            if self.is_multiplayer:
+                self._draw_multiplayer_game_over(surface)
             else:
-                best_txt = self.font_small.render(f"BEST RECORD: {self.high_score}", True, COLOR_TEXT_MUTED)
-            surface.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 320)))
+                modal_rect = pygame.Rect(45, 170, SCREEN_WIDTH - 90, 275)
+                pygame.draw.rect(surface, (24, 27, 44), modal_rect, border_radius=12)
+                pygame.draw.rect(surface, (55, 62, 92), modal_rect, width=2, border_radius=12)
 
-            retry_surf = self.font_body.render("Press SPACE / R to Retry", True, (45, 212, 191))
-            surface.blit(retry_surf, retry_surf.get_rect(center=(SCREEN_WIDTH // 2, 380)))
+                go_surf = self.font_title.render("GAME OVER", True, COLOR_ACCENT)
+                surface.blit(go_surf, go_surf.get_rect(center=(SCREEN_WIDTH // 2, 210)))
+
+                score_txt = self.font_body.render(f"FINAL SCORE: {self.score}", True, COLOR_TEXT)
+                surface.blit(score_txt, score_txt.get_rect(center=(SCREEN_WIDTH // 2, 255)))
+
+                # Best Combo Streak
+                streak_color = (250, 204, 21) if self.combo_max >= 3 else (45, 212, 191) if self.combo_max >= 2 else COLOR_TEXT_MUTED
+                streak_txt = self.font_badge.render(f"MAX STREAK: {self.combo_max}x COMBO", True, streak_color)
+                surface.blit(streak_txt, streak_txt.get_rect(center=(SCREEN_WIDTH // 2, 288)))
+
+                if self.is_new_best and self.score > 0:
+                    best_txt = self.font_badge.render("★ NEW BEST RECORD! ★", True, (250, 204, 21))
+                else:
+                    best_txt = self.font_small.render(f"BEST RECORD: {self.high_score}", True, COLOR_TEXT_MUTED)
+                surface.blit(best_txt, best_txt.get_rect(center=(SCREEN_WIDTH // 2, 320)))
+
+                retry_surf = self.font_body.render("Press SPACE / R to Retry", True, (45, 212, 191))
+                surface.blit(retry_surf, retry_surf.get_rect(center=(SCREEN_WIDTH // 2, 380)))
+
+    def _draw_multiplayer_duel_bar(self, surface):
+        """Draws top duel HUD comparing local player and rival scores."""
+        bar_w = 260
+        bar_h = 30
+        bar_x = (SCREEN_WIDTH - bar_w) // 2
+        bar_y = 16
+
+        pill = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        pygame.draw.rect(pill, (15, 23, 42, 220), (0, 0, bar_w, bar_h), border_radius=8)
+        pygame.draw.rect(pill, (0, 240, 255), (0, 0, bar_w, bar_h), width=1, border_radius=8)
+        surface.blit(pill, (bar_x, bar_y))
+
+        # YOU
+        you_txt = self.font_badge.render(f"YOU: {self.score}", True, (56, 189, 248))
+        surface.blit(you_txt, (bar_x + 14, bar_y + 7))
+
+        # VS
+        vs_txt = self.font_small.render("VS", True, (148, 163, 184))
+        surface.blit(vs_txt, vs_txt.get_rect(center=(SCREEN_WIDTH // 2, bar_y + bar_h // 2)))
+
+        # RIVAL
+        rival_status = f"{self.rival_ghost.score}" if self.rival_ghost.is_alive else f"{self.rival_ghost.score} [KO]"
+        rival_color = (255, 114, 182) if self.rival_ghost.is_alive else (239, 68, 68)
+        rival_txt = self.font_badge.render(f"RIVAL: {rival_status}", True, rival_color)
+        surface.blit(rival_txt, (bar_x + bar_w - rival_txt.get_width() - 14, bar_y + 7))
+
+    def _draw_multiplayer_game_over(self, surface):
+        """Draws cyberpunk duel outcome card in 2P Rival Race."""
+        modal_rect = pygame.Rect(35, 155, SCREEN_WIDTH - 70, 305)
+        pygame.draw.rect(surface, (20, 24, 42), modal_rect, border_radius=14)
+
+        if self.duel_result == "VICTORY":
+            border_col = (250, 204, 21)
+            title_text = "🏆 VICTORY!"
+            title_col = (250, 204, 21)
+            desc_text = "You outlasted your rival!"
+        elif self.duel_result == "DEFEAT":
+            border_col = (244, 63, 94)
+            title_text = "💀 DEFEAT"
+            title_col = (244, 63, 94)
+            desc_text = "Rival reached a higher score!"
+        elif self.duel_result == "TIED":
+            border_col = (0, 240, 255)
+            title_text = "⚡ TIED DUEL!"
+            title_col = (0, 240, 255)
+            desc_text = "Both pilots tied identically!"
+        else:
+            border_col = (234, 179, 8)
+            title_text = "⏳ DUEL IN PROGRESS"
+            title_col = (234, 179, 8)
+            desc_text = "Rival is still surviving..."
+
+        pygame.draw.rect(surface, border_col, modal_rect, width=2, border_radius=14)
+
+        # Header Title
+        title_surf = self.font_title.render(title_text, True, title_col)
+        surface.blit(title_surf, title_surf.get_rect(center=(SCREEN_WIDTH // 2, 196)))
+
+        desc_surf = self.font_small.render(desc_text, True, (203, 213, 225))
+        surface.blit(desc_surf, desc_surf.get_rect(center=(SCREEN_WIDTH // 2, 230)))
+
+        # Score Comparison Box
+        box_rect = pygame.Rect(55, 255, SCREEN_WIDTH - 110, 80)
+        pygame.draw.rect(surface, (15, 23, 42), box_rect, border_radius=10)
+        pygame.draw.rect(surface, (51, 65, 85), box_rect, width=1, border_radius=10)
+
+        # Your Score
+        you_lbl = self.font_small.render("YOUR SCORE", True, (148, 163, 184))
+        surface.blit(you_lbl, you_lbl.get_rect(center=(box_rect.left + 65, box_rect.top + 22)))
+        you_val = self.font_title.render(str(self.score), True, (56, 189, 248))
+        surface.blit(you_val, you_val.get_rect(center=(box_rect.left + 65, box_rect.top + 52)))
+
+        # VS divider
+        vs_lbl = self.font_badge.render("VS", True, (100, 116, 139))
+        surface.blit(vs_lbl, vs_lbl.get_rect(center=(box_rect.centerx, box_rect.centery)))
+
+        # Rival Score
+        riv_lbl = self.font_small.render("RIVAL SCORE", True, (148, 163, 184))
+        surface.blit(riv_lbl, riv_lbl.get_rect(center=(box_rect.right - 65, box_rect.top + 22)))
+        riv_val = self.font_title.render(str(self.rival_ghost.score), True, (255, 114, 182))
+        surface.blit(riv_val, riv_val.get_rect(center=(box_rect.right - 65, box_rect.top + 52)))
+
+        # Max combo indicator
+        streak_txt = self.font_badge.render(f"YOUR MAX STREAK: {self.combo_max}x COMBO", True, (45, 212, 191))
+        surface.blit(streak_txt, streak_txt.get_rect(center=(SCREEN_WIDTH // 2, 365)))
+
+        # Return hint
+        hint_txt = self.font_body.render("Press SPACE / CLICK to Return", True, (255, 255, 255))
+        surface.blit(hint_txt, hint_txt.get_rect(center=(SCREEN_WIDTH // 2, 415)))
 
     def _draw_combo_meter(self, surface):
         """Displays pulsating arcade combo streak badge with depleting timer gauge."""
