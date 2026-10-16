@@ -71,60 +71,98 @@ class NetworkClient:
             self._thread.start()
 
     def _start_wasm_websocket(self):
-        """Initializes browser native WebSocket via Emscripten platform bridge."""
+        """Initializes browser native WebSocket via native JS bridge to avoid WASM callback deadlocks."""
         try:
-            from platform import window
+            import platform
             url = self.server_url
             try:
                 # 1. Allow query parameter override e.g. ?server=wss://...
-                params = window.URLSearchParams.new(window.location.search)
+                params = platform.window.URLSearchParams.new(platform.window.location.search)
                 if params.has("server"):
                     url = params.get("server")
                 elif "127.0.0.1" in url or "localhost" in url:
                     # 2. Auto-detect host IP when accessed across Wi-Fi e.g. http://192.168.100.22:8000
-                    hostname = str(window.location.hostname)
+                    hostname = str(platform.window.location.hostname)
                     if hostname and hostname != "localhost" and hostname != "127.0.0.1":
-                        proto = "wss://" if str(window.location.protocol) == "https:" else "ws://"
+                        proto = "wss://" if str(platform.window.location.protocol) == "https:" else "ws://"
                         url = f"{proto}{hostname}:8765"
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"[WASM] URL detection warning: {e}")
 
-            logging.info(f"[WASM NetworkClient] Connecting to {url}...")
-            self._ws = window.WebSocket.new(url)
-
-            def on_open(event):
-                self.connected = True
-                self.inbox.put({"type": "connected", "url": url})
-                logging.info("[WASM NetworkClient] Connected successfully!")
-
-            def on_message(event):
-                try:
-                    data = json.loads(str(event.data))
-                    self._handle_incoming_message(data)
-                except Exception as e:
-                    logging.error(f"[WASM NetworkClient] JSON parse error: {e}")
-
-            def on_error(event):
-                self.connected = False
-                self.inbox.put({"type": "connection_error", "error": "WebSocket error occurred"})
-
-            def on_close(event):
-                self.connected = False
-                self.inbox.put({"type": "connection_error", "error": "Connection closed"})
-
-            self._ws.onopen = on_open
-            self._ws.onmessage = on_message
-            self._ws.onerror = on_error
-            self._ws.onclose = on_close
+            # Define native JS bridge object on window
+            js_init = """
+            if (!window.recoil_ws) {
+                window.recoil_ws = {
+                    socket: null,
+                    inbox: [],
+                    connected: false,
+                    connect: function(targetUrl) {
+                        try {
+                            console.log('[RecoilWS] Connecting to ' + targetUrl);
+                            if (this.socket) {
+                                try { this.socket.close(); } catch(e) {}
+                            }
+                            this.connected = false;
+                            this.inbox = [];
+                            var ws = new WebSocket(targetUrl);
+                            this.socket = ws;
+                            var self = this;
+                            ws.onopen = function() {
+                                self.connected = true;
+                                self.inbox.push(JSON.stringify({type: 'connected', url: targetUrl}));
+                                console.log('[RecoilWS] Connected successfully!');
+                            };
+                            ws.onmessage = function(event) {
+                                self.inbox.push(event.data);
+                            };
+                            ws.onerror = function(err) {
+                                self.connected = false;
+                                self.inbox.push(JSON.stringify({type: 'connection_error', error: 'WebSocket error'}));
+                                console.error('[RecoilWS] Socket error', err);
+                            };
+                            ws.onclose = function() {
+                                self.connected = false;
+                                self.inbox.push(JSON.stringify({type: 'connection_error', error: 'Connection closed'}));
+                                console.log('[RecoilWS] Connection closed');
+                            };
+                        } catch(err) {
+                            console.error('[RecoilWS] Connect failed: ' + err);
+                            this.inbox.push(JSON.stringify({type: 'connection_error', error: String(err)}));
+                        }
+                    },
+                    send: function(msgStr) {
+                        if (this.socket && this.socket.readyState === 1) {
+                            this.socket.send(msgStr);
+                        }
+                    },
+                    poll: function() {
+                        if (this.inbox.length === 0) return '[]';
+                        var msgs = this.inbox.slice();
+                        this.inbox = [];
+                        return JSON.stringify(msgs);
+                    }
+                };
+            }
+            """
+            platform.window.eval(js_init)
+            logging.info(f"[WASM NetworkClient] Invoking JS connect to {url}...")
+            platform.window.eval(f"window.recoil_ws.connect('{url}')")
         except Exception as e:
-            logging.error(f"[WASM NetworkClient] Failed to setup WebSocket: {e}")
+            logging.error(f"[WASM NetworkClient] Failed to setup WebSocket bridge: {e}")
 
     def stop(self):
         """Stops network client and closes connection."""
         self._running = False
         self.connected = False
-        if self.outbox:
-            self.outbox.put({"type": "_stop"})
+        if IS_WASM:
+            try:
+                import platform
+                platform.window.eval("if (window.recoil_ws && window.recoil_ws.socket) window.recoil_ws.socket.close();")
+            except Exception:
+                pass
+        else:
+            if self.outbox:
+                self.outbox.put({"type": "_stop"})
 
     def _worker_thread(self):
         """Background thread running asyncio event loop for WebSockets."""
@@ -257,18 +295,35 @@ class NetworkClient:
     def poll_events(self):
         """
         Pulls all received events from the inbox.
-        In WASM mode, also dispatches outbox queue to JS WebSocket.
+        In WASM mode, polls the native JS bridge without blocking.
         Returns a list of event dicts to be handled by Pygame.
         """
-        # On WASM, flush outbox messages into native WebSocket
-        if IS_WASM and self._ws and self.connected:
-            while not self.outbox.empty():
-                try:
+        if IS_WASM:
+            try:
+                import platform
+                # Sync connected status
+                self.connected = bool(platform.window.eval("window.recoil_ws ? window.recoil_ws.connected : false"))
+
+                # Flush outbox into JS WebSocket
+                while not self.outbox.empty():
                     msg = self.outbox.get_nowait()
                     if msg.get("type") != "_stop":
-                        self._ws.send(json.dumps(msg))
-                except Exception:
-                    break
+                        json_str = json.dumps(msg)
+                        escaped = json.dumps(json_str)
+                        platform.window.eval(f"window.recoil_ws.send({escaped})")
+
+                # Poll messages from JS inbox
+                raw_json = str(platform.window.eval("window.recoil_ws ? window.recoil_ws.poll() : '[]'"))
+                if raw_json and raw_json != "[]":
+                    msg_list = json.loads(raw_json)
+                    for item in msg_list:
+                        if isinstance(item, str):
+                            data = json.loads(item)
+                        else:
+                            data = item
+                        self._handle_incoming_message(data)
+            except Exception as e:
+                logging.error(f"[WASM poll error]: {e}")
 
         events = []
         while not self.inbox.empty():

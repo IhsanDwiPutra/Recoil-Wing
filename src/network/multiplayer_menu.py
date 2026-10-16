@@ -4,6 +4,7 @@ Provides cyber-arcade UI for creating rooms, entering 4-letter room codes,
 waiting for rivals, and triggering synchronized 3-2-1 match countdowns.
 """
 import time
+import math
 import pygame
 from src.config import (
     SCREEN_WIDTH,
@@ -291,7 +292,7 @@ class MultiplayerMenu:
         surface.blit(code_surf, code_surf.get_rect(center=code_box.center))
 
         # Pulsing text
-        pulse_alpha = int(180 + 75 * (0.5 + 0.5 * pygame.math.Vector2(1, 0).rotate(self.pulse_timer * 200).x))
+        pulse_alpha = int(180 + 75 * (0.5 + 0.5 * math.sin(self.pulse_timer * 4.0)))
         wait_surf = self.font_body.render("WAITING FOR RIVAL...", True, (255, 215, 0))
         wait_surf.set_alpha(pulse_alpha)
         surface.blit(wait_surf, wait_surf.get_rect(center=(SCREEN_WIDTH // 2, 380)))
